@@ -1,0 +1,86 @@
+# =============================================================================
+# .gitignore — RAG App (Terraform + Spring Boot + Angular + Docker)
+# =============================================================================
+
+# =============================================================================
+# TERRAFORM
+# =============================================================================
+**/.terraform/
+**/.terraform.lock.hcl
+**/terraform.tfvars          # ⚠️ contient les secrets (project_id, IPs)
+**/*.tfstate
+**/*.tfstate.backup
+**/tfplan
+**/override.tf
+**/override.tf.json
+
+# Clés Service Account générées par Terraform
+sa-key*.json
+*-sa-key.json
+
+# =============================================================================
+# SECRETS & VARIABLES D'ENVIRONNEMENT
+# =============================================================================
+.env
+.env.*
+!.env.example               # garder l'example committé
+*.pem
+*.key
+*.p12
+*.pfx
+
+# =============================================================================
+# SPRING BOOT / JAVA
+# =============================================================================
+nex-rag/target/
+nex-rag/*.jar
+nex-rag/*.war
+nex-rag/.mvn/wrapper/maven-wrapper.jar
+nex-rag/.classpath
+nex-rag/.project
+nex-rag/.settings/
+nex-rag/.idea/
+nex-rag/*.iml
+
+# Logs Spring Boot
+logs/
+*.log
+*.log.*
+
+# =============================================================================
+# ANGULAR / NODE
+# =============================================================================
+agentic-rag-ui/node_modules/
+agentic-rag-ui/dist/
+agentic-rag-ui/.angular/
+agentic-rag-ui/.sass-cache/
+agentic-rag-ui/coverage/
+
+# =============================================================================
+# DOCKER
+# =============================================================================
+uploads/                    # fichiers uploadés par les users
+docker-data/                # volumes Docker locaux
+
+# =============================================================================
+# IDE
+# =============================================================================
+.idea/
+*.iml
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# =============================================================================
+# OS
+# =============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+EOF

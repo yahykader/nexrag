@@ -13,7 +13,7 @@ import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
 import com.exemple.nexrag.service.rag.ingestion.util.MetadataSanitizer;
 import com.exemple.nexrag.service.rag.ingestion.util.StreamingFileReader;
-import com.exemple.nexrag.service.rag.ingestion.validation.FileSignatureValidator;
+import com.exemple.nexrag.validation.FileSignatureValidator;
 import com.exemple.nexrag.exception.DuplicateFileException;
 import dev.langchain4j.data.document.Metadata;
 import dev.langchain4j.data.embedding.Embedding;

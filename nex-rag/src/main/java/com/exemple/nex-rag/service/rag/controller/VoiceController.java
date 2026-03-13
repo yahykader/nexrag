@@ -1,20 +1,28 @@
 package com.exemple.nexrag.service.rag.controller;
 
-import com.exemple.nexrag.service.rag.voice.WhisperService;
-
+import com.exemple.nexrag.constant.VoiceConstants;
+import com.exemple.nexrag.dto.TranscriptionResponse;
+import com.exemple.nexrag.dto.VoiceHealthResponse;
+import com.exemple.nexrag.service.rag.facade.VoiceFacade;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.HashMap;
-import java.util.Map;
-
 /**
- * ✅ Controller pour la transcription audio
+ * Controller REST pour la transcription audio (Speech-to-Text).
+ *
+ * Principe SRP : unique responsabilité → router les requêtes HTTP.
+ *                Zéro logique métier ici — tout délégué à {@link VoiceFacade}.
+ * Principe DIP : dépend de l'abstraction VoiceFacade, pas de WhisperService.
+ * Clean code   : zéro try/catch, zéro Map non typé, zéro magic number.
+ *
+ * @author RAG Team
+ * @version 2.0
  */
 @Slf4j
 @RestController
@@ -22,88 +30,35 @@ import java.util.Map;
 @RequiredArgsConstructor
 @Tag(name = "Google Speech-to-Text", description = "API Google Speech-to-Text")
 public class VoiceController {
-    
-    private final WhisperService whisperService;
-    
-    /**
-     * ✅ Endpoint de transcription audio
-     * 
-     * POST /api/voice/transcribe
-     * 
-     * @param audioFile Fichier audio (webm, mp3, wav, etc.)
-     * @param language Code langue optionnel (fr, en, es, etc.)
-     * @return JSON avec la transcription
-     */
+
+    private final VoiceFacade voiceFacade;
+
+    // =========================================================================
+    // TRANSCRIPTION
+    // =========================================================================
+
     @PostMapping("/transcribe")
-    public ResponseEntity<Map<String, Object>> transcribe(
-        @RequestParam("audio") MultipartFile audioFile,
-        @RequestParam(value = "language", required = false, defaultValue = "fr") String language
-    ) {
-        try {
-            log.info("📥 [Voice] Réception fichier audio");
-            log.info("📁 [Voice] Nom: {}", audioFile.getOriginalFilename());
-            log.info("📊 [Voice] Taille: {} bytes", audioFile.getSize());
-            log.info("🎵 [Voice] Type: {}", audioFile.getContentType());
-            log.info("🌍 [Voice] Langue: {}", language);
-            
-            // Vérifications
-            if (audioFile.isEmpty()) {
-                log.warn("⚠️ [Voice] Fichier audio vide");
-                return ResponseEntity.badRequest()
-                    .body(createErrorResponse("Le fichier audio est vide"));
-            }
-            
-            if (audioFile.getSize() > 25 * 1024 * 1024) {  // 25 MB max
-                log.warn("⚠️ [Voice] Fichier trop volumineux: {} bytes", audioFile.getSize());
-                return ResponseEntity.badRequest()
-                    .body(createErrorResponse("Le fichier audio dépasse 25 MB"));
-            }
-            
-            // Transcription
-            byte[] audioBytes = audioFile.getBytes();
-            String transcript = whisperService.transcribeAudio(
-                audioBytes, 
-                audioFile.getOriginalFilename(),
-                language
-            );
-            
-            log.info("✅ [Voice] Transcription réussie: {} caractères", transcript.length());
-            
-            // Réponse
-            Map<String, Object> response = new HashMap<>();
-            response.put("success", true);
-            response.put("transcript", transcript);
-            response.put("language", language);
-            response.put("audioSize", audioFile.getSize());
-            response.put("filename", audioFile.getOriginalFilename());
-            
-            return ResponseEntity.ok(response);
-            
-        } catch (Exception e) {
-            log.error("❌ [Voice] Erreur transcription", e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(createErrorResponse("Erreur lors de la transcription: " + e.getMessage()));
-        }
+    @Operation(
+        summary     = "Transcrire un fichier audio",
+        description = "Formats acceptés : webm, mp3, wav. Taille max : 25 MB."
+    )
+    public ResponseEntity<TranscriptionResponse> transcribe(
+            @Parameter(description = "Fichier audio à transcrire")
+            @RequestParam("audio") MultipartFile audioFile,
+            @Parameter(description = "Code langue (fr, en, es…)")
+            @RequestParam(value = "language", required = false,
+                          defaultValue = VoiceConstants.DEFAULT_LANGUAGE) String language) {
+
+        return ResponseEntity.ok(voiceFacade.transcribe(audioFile, language));
     }
-    
-    /**
-     * ✅ Health check
-     */
+
+    // =========================================================================
+    // HEALTH
+    // =========================================================================
+
     @GetMapping("/health")
-    public ResponseEntity<Map<String, Object>> health() {
-        Map<String, Object> response = new HashMap<>();
-        response.put("status", "ok");
-        response.put("whisperAvailable", whisperService.isAvailable());
-        return ResponseEntity.ok(response);
-    }
-    
-    /**
-     * ✅ Crée une réponse d'erreur
-     */
-    private Map<String, Object> createErrorResponse(String message) {
-        Map<String, Object> response = new HashMap<>();
-        response.put("success", false);
-        response.put("error", message);
-        return response;
+    @Operation(summary = "Health check du service de transcription")
+    public ResponseEntity<VoiceHealthResponse> health() {
+        return ResponseEntity.ok(voiceFacade.health());
     }
 }

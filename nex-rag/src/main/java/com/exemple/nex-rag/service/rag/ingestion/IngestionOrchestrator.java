@@ -7,6 +7,8 @@ package com.exemple.nexrag.service.rag.ingestion;
 import com.exemple.nexrag.service.rag.ingestion.repository.EmbeddingRepository;
 import com.exemple.nexrag.service.rag.ingestion.deduplication.DeduplicationService;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
+import com.exemple.nexrag.dto.ScanResult;
+import com.exemple.nexrag.config.ClamAvProperties;
 import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.security.AntivirusScanner;
 import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionStrategy;
@@ -37,8 +39,7 @@ public class IngestionOrchestrator {
     private final AntivirusScanner antivirusScanner;
     private final EmbeddingRepository embeddingRepository;
     
-    @Value("${security.antivirus.enabled:true}")
-    private boolean antivirusEnabled;
+    private final ClamAvProperties antivirusProps;
     
     private final Map<String, IngestionStatus> activeIngestions = new ConcurrentHashMap<>();
     
@@ -48,7 +49,8 @@ public class IngestionOrchestrator {
             IngestionTracker tracker,
             DeduplicationService deduplicationService,
             AntivirusScanner antivirusScanner,
-            EmbeddingRepository embeddingRepository) {
+            EmbeddingRepository embeddingRepository,
+            ClamAvProperties antivirusProps) {
         
         this.strategies = strategies;
         this.ragMetrics = ragMetrics;
@@ -56,12 +58,13 @@ public class IngestionOrchestrator {
         this.deduplicationService = deduplicationService;
         this.antivirusScanner = antivirusScanner;
         this.embeddingRepository = embeddingRepository;
+        this.antivirusProps = antivirusProps;
         
         this.strategies.sort(Comparator.comparingInt(IngestionStrategy::getPriority));
         
         log.info("✅ MultimodalIngestionService initialisé");
         log.info("📋 {} strategies | 🦠 Antivirus: {} | 🔐 Dedup: ACTIVÉE",
-            strategies.size(), antivirusEnabled ? "ON" : "OFF");
+            strategies.size(), antivirusProps.isEnabled() ? "ON" : "OFF");
     }
     
     // ========================================================================
@@ -227,14 +230,14 @@ public class IngestionOrchestrator {
         
         try {
             // 0. SCAN ANTIVIRUS
-            if (antivirusEnabled) {
+            if (antivirusProps.isEnabled()) {
                 log.debug("🦠 Antivirus scan: {}", filename);
                 
                 byte[] fileBytes = file.getBytes();
                 File tempFile = File.createTempFile("scan-", ".tmp");
                 Files.write(tempFile.toPath(), fileBytes);
                 
-                AntivirusScanner.ScanResult scanResult = antivirusScanner.scanFile(tempFile);
+                ScanResult scanResult = antivirusScanner.scanFile(tempFile);
                 tempFile.delete();
                 
                 if (!scanResult.isClean()) {
@@ -476,7 +479,7 @@ public class IngestionOrchestrator {
     
     public HealthReport getHealthReport() {
         boolean redisHealthy = deduplicationService.isRedisAvailable();
-        boolean antivirusHealthy = antivirusEnabled ? 
+        boolean antivirusHealthy = antivirusProps.isEnabled() ? 
             antivirusScanner.isAvailable() : true;
         ServiceStats stats = getStats();
         
@@ -494,7 +497,7 @@ public class IngestionOrchestrator {
             stats.trackerBatches(),
             redisHealthy,
             antivirusHealthy,
-            antivirusEnabled
+            antivirusProps.isEnabled()
         );
     }
     

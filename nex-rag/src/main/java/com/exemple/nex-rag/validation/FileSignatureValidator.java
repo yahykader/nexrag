@@ -2,7 +2,7 @@
 // SERVICE - FileSignatureValidator.java
 // Validation des signatures de fichiers (magic bytes) pour sécurité
 // ============================================================================
-package com.exemple.nexrag.service.rag.ingestion.validation;
+package com.exemple.nexrag.validation;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

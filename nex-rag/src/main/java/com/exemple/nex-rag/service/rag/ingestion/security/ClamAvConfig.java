@@ -1,78 +1,65 @@
-
-
-/**
- * Configuration Spring pour le service antivirus ClamAV.
- * Activer/désactiver le scan antivirus via propriétés
- * Configurer les paramètres de connexion ClamAV
- * Surveiller la disponibilité du service (health check)
-*/
-package com.exemple.nexrag.service.rag.ingestion.security;
+package com.exemple.nexrag.config;
 
 import com.exemple.nexrag.service.rag.ingestion.security.AntivirusScanner;
-import com.exemple.nexrag.config.ClamAvProperties;
+import com.exemple.nexrag.service.rag.ingestion.security.ClamAvResponseParser;
+import com.exemple.nexrag.service.rag.ingestion.security.ClamAvSocketClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
 
+/**
+ * Configuration Spring pour le service antivirus ClamAV.
+ *
+ * Principe SRP : unique responsabilité → créer et câbler les beans antivirus.
+ *                Le health check est délégué à {@link com.exemple.nexrag.service.rag.ingestion.security.ClamAvHealthScheduler}.
+ * Clean code   : supprime l'appel direct {@code antivirusScanner()} dans le scheduler
+ *                (qui pouvait sembler créer une nouvelle instance hors proxy Spring).
+ *
+ * @author ayahyaoui
+ * @version 2.0
+ */
 @Slf4j
 @Configuration
-@EnableScheduling
 @RequiredArgsConstructor
 @EnableConfigurationProperties(ClamAvProperties.class)
 public class ClamAvConfig {
 
-    private final ClamAvProperties props;
+    private final ClamAvProperties   props;
+    private final ClamAvResponseParser responseParser;
 
-
-    /**
-     * Bean principal du scanner antivirus (configuré via application.yml).
-     */
     @Bean
-    public AntivirusScanner antivirusScanner() {
-
-        AntivirusScanner scanner = new AntivirusScanner(props);
-
-        // Vérification de disponibilité au démarrage
-        if (props.isEnabled()) {
-            if (scanner.isAvailable()) {
-                log.info("✅ ClamAV connecté avec succès - Version: {}", scanner.getVersion());
-            } else {
-                log.warn("⚠️ ClamAV activé mais indisponible ({}:{})",
-                        props.getHost(), props.getPort());
-            }
-        } else {
-            log.info("🦠 ClamAV désactivé via configuration (antivirus.enabled=false)");
-        }
-
-        return scanner;
+    public ClamAvSocketClient clamAvSocketClient() {
+        return new ClamAvSocketClient(props);
     }
 
     /**
-     * Health check périodique (uniquement si enabled + health-check.enabled).
-     *
-     * ✅ FIX: on injecte le bean AntivirusScanner (pas de recréation via antivirusScanner()).
+     * Bean principal du scanner antivirus.
+     * Vérifie la disponibilité au démarrage et log le résultat.
      */
-    @Scheduled(fixedDelayString = "${antivirus.health-check.interval:60000}")
-    @ConditionalOnProperty(prefix = "antivirus", name = {"enabled", "health-check.enabled"}, havingValue = "true")
-    public void healthCheck() {
-        try {
+    @Bean
+    public AntivirusScanner antivirusScanner(ClamAvSocketClient socketClient) {
+        AntivirusScanner scanner = new AntivirusScanner(props, socketClient, responseParser);
+        logStartupStatus(scanner);
+        return scanner;
+    }
 
-            AntivirusScanner scanner = antivirusScanner(); // ✅ récupère le bean Spring
+    // -------------------------------------------------------------------------
+    // Privé
+    // -------------------------------------------------------------------------
 
-            if (!scanner.isAvailable()) {
-                log.warn("⚠️ [HEALTH CHECK] ClamAV est devenu indisponible !");
-                log.warn("⚠️ Les fichiers ne seront PAS scannés jusqu'au rétablissement");
-                 // TODO: Envoyer alerte monitoring (Prometheus, etc.)
-            } else {
-                log.debug("✓ [HEALTH CHECK] ClamAV opérationnel");
-            }
-        } catch (Exception e) {
-            log.error("❌ [HEALTH CHECK] Erreur lors de la vérification ClamAV", e);
+    private void logStartupStatus(AntivirusScanner scanner) {
+        if (!props.isEnabled()) {
+            log.info("🦠 ClamAV désactivé (antivirus.enabled=false)");
+            return;
+        }
+
+        if (scanner.isAvailable()) {
+            log.info("✅ ClamAV connecté — version : {}", scanner.getVersion());
+        } else {
+            log.warn("⚠️ ClamAV activé mais indisponible ({}:{})",
+                props.getHost(), props.getPort());
         }
     }
 }

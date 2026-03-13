@@ -217,27 +217,19 @@ deduplication:
 # ============================================================================
 # SECURITY - ANTIVIRUS ClamAV
 # ============================================================================
-security:
-  antivirus:
-    enabled: true
-    clamd-host: localhost
-    clamd-port: 3310
-    timeout-seconds: 30
-    stream-max-length: 104857600  # 100 MB
-    retry-attempts: 2
-    retry-delay-ms: 1000
-
-# Ancienne config antivirus (compatible)
 antivirus:
-  enabled: ${security.antivirus.enabled:true}
-  host: ${security.antivirus.clamd-host:localhost}
-  port: ${security.antivirus.clamd-port:3310}
-  timeout: 45000
-  chunk-size: 8192
-  max-file-size: 104857600
+  enabled: true
+  host: localhost
+  port: 3310
+  timeout: 45000              # ms — timeout connexion et lecture socket
+  chunk-size: 8192            # bytes — taille des chunks INSTREAM
+  max-file-size: 104857600    # bytes — 100 MB
+  retry:
+    attempts: 2
+    delay-ms: 1000
   health-check:
     enabled: true
-    interval: 120000
+    interval: 120000          # ms — fréquence du health check périodique
 
 # ============================================================================
 # OPENAI
@@ -524,7 +516,7 @@ management:
     defaults:
       enabled: true
     clamav:
-      enabled: ${security.antivirus.enabled:true}
+      enabled: ${antivirus.enabled:true}
 
 
 

@@ -461,8 +461,8 @@ public class IngestionOrchestrator {
         return new ServiceStats(
             strategies.size(),
             activeIngestions.size(),
-            tracker.getActiveBatchCount(),
-            tracker.getTotalEmbeddingCount(),
+            tracker.getBatchCount(),
+            tracker.getTotalEmbeddings(),
             ragMetrics.getActiveIngestions()
         );
     }

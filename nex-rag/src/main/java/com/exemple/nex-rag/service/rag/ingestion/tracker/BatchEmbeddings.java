@@ -1,108 +1,52 @@
-// ============================================================================
-// MODEL - BatchEmbeddings.java
-// Modèle pour stocker les IDs d'embeddings d'un batch
-// ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.tracker;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Modèle pour stocker les IDs d'embeddings créés pendant un batch d'ingestion.
- * 
- * Thread-safe : utilise des listes synchronisées
+ * IDs d'embeddings créés pendant un batch — utilisé pour le rollback.
+ *
+ * Principe SRP : unique responsabilité → porter les IDs d'un batch.
+ * Clean code   : utilise {@link ConcurrentHashMap#newKeySet()} de manière
+ *                cohérente — contrairement à {@code Collections.synchronizedList}
+ *                qui nécessite des blocs {@code synchronized} manuels supplémentaires.
+ *                {@code newKeySet()} est atomique sans synchronisation externe.
  */
 public class BatchEmbeddings {
-    
-    private final List<String> textEmbeddingIds;
-    private final List<String> imageEmbeddingIds;
-    
-    public BatchEmbeddings() {
-        this.textEmbeddingIds = Collections.synchronizedList(new ArrayList<>());
-        this.imageEmbeddingIds = Collections.synchronizedList(new ArrayList<>());
+
+    private final Set<String> textEmbeddingIds  = ConcurrentHashMap.newKeySet();
+    private final Set<String> imageEmbeddingIds = ConcurrentHashMap.newKeySet();
+
+    // -------------------------------------------------------------------------
+    // Ajout
+    // -------------------------------------------------------------------------
+
+    public void addTextEmbedding(String id) {
+        if (id != null && !id.isBlank()) textEmbeddingIds.add(id);
     }
-    
-    // ========================================================================
-    // AJOUT
-    // ========================================================================
-    
-    /**
-     * Ajoute un ID d'embedding texte
-     */
-    public void addTextEmbedding(String embeddingId) {
-        if (embeddingId != null && !embeddingId.isBlank()) {
-            textEmbeddingIds.add(embeddingId);
-        }
+
+    public void addImageEmbedding(String id) {
+        if (id != null && !id.isBlank()) imageEmbeddingIds.add(id);
     }
-    
-    /**
-     * Ajoute un ID d'embedding image
-     */
-    public void addImageEmbedding(String embeddingId) {
-        if (embeddingId != null && !embeddingId.isBlank()) {
-            imageEmbeddingIds.add(embeddingId);
-        }
-    }
-    
-    // ========================================================================
-    // RÉCUPÉRATION
-    // ========================================================================
-    
-    /**
-     * Retourne une copie de la liste des IDs d'embeddings texte
-     */
-    public List<String> getTextEmbeddingIds() {
-        synchronized (textEmbeddingIds) {
-            return new ArrayList<>(textEmbeddingIds);
-        }
-    }
-    
-    /**
-     * Retourne une copie de la liste des IDs d'embeddings image
-     */
-    public List<String> getImageEmbeddingIds() {
-        synchronized (imageEmbeddingIds) {
-            return new ArrayList<>(imageEmbeddingIds);
-        }
-    }
-    
-    /**
-     * Retourne le nombre d'embeddings texte
-     */
-    public int getTextEmbeddingCount() {
-        return textEmbeddingIds.size();
-    }
-    
-    /**
-     * Retourne le nombre d'embeddings image
-     */
-    public int getImageEmbeddingCount() {
-        return imageEmbeddingIds.size();
-    }
-    
-    /**
-     * Retourne le nombre total d'embeddings
-     */
-    public int getTotalCount() {
-        return textEmbeddingIds.size() + imageEmbeddingIds.size();
-    }
-    
-    // ========================================================================
-    // NETTOYAGE
-    // ========================================================================
-    
-    /**
-     * Vide toutes les listes
-     */
-    public void clear() {
-        textEmbeddingIds.clear();
-        imageEmbeddingIds.clear();
-    }
-    
+
+    // -------------------------------------------------------------------------
+    // Lecture — copies défensives
+    // -------------------------------------------------------------------------
+
+    public List<String> getTextEmbeddingIds()  { return new ArrayList<>(textEmbeddingIds);  }
+    public List<String> getImageEmbeddingIds() { return new ArrayList<>(imageEmbeddingIds); }
+
+    public int getTextEmbeddingCount()  { return textEmbeddingIds.size();  }
+    public int getImageEmbeddingCount() { return imageEmbeddingIds.size(); }
+    public int getTotalCount()          { return getTextEmbeddingCount() + getImageEmbeddingCount(); }
+
+    public boolean isEmpty() { return textEmbeddingIds.isEmpty() && imageEmbeddingIds.isEmpty(); }
+
     @Override
     public String toString() {
-        return String.format("BatchEmbeddings[text=%d, images=%d, total=%d]",
-            getTextEmbeddingCount(), getImageEmbeddingCount(), getTotalCount());
+        return String.format("BatchEmbeddings[text=%d, images=%d]",
+            getTextEmbeddingCount(), getImageEmbeddingCount());
     }
 }

@@ -6,8 +6,8 @@ package com.exemple.nexrag.service.rag.ingestion.strategy;
 
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
 import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.DeduplicationService;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.TextDeduplicationService;
+import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
+import com.exemple.nexrag.service.rag.ingestion.deduplication.text.TextDeduplicationService;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
 import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;

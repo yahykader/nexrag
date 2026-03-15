@@ -151,6 +151,11 @@ embedding:
   image:
     dimension: 512   # ✅ CLIP ou autre modèle image
 
+  cache:
+    enabled: true
+    ttl-hours: 24
+    max-size-mb: 100
+    
   compression:
     # Active/désactive compression
     enabled: true
@@ -210,7 +215,6 @@ redis:
 deduplication:
   text:
     enabled: true                    # Activer déduplication
-    redis-prefix: "text:dedup:"      # Préfixe Redis
     ttl-days: 30                     # TTL des hashes (30 jours)
     batch-id-scope: false            # false = dédup globale, true = par batch
 

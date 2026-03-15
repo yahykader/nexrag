@@ -4,10 +4,11 @@
 // ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
+import com.exemple.nexrag.dto.deduplication.file.DuplicationInfo;
 import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.ImageSaver;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.VisionAnalyzer;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.DeduplicationService;
+import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
 import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
@@ -322,14 +323,14 @@ public class ImageIngestionStrategy implements IngestionStrategy {
     }
     
     private void checkDuplication(MultipartFile file, String filename) throws Exception {
-        DeduplicationService.DuplicationInfo dupInfo = 
-            deduplicationService.checkDuplication(file);
+        DuplicationInfo dupInfo = 
+            deduplicationService.check(file);
         
         if (dupInfo.isDuplicate()) {
             throw new DuplicateFileException(
                 String.format("Already processed (batch: %s)", 
-                    dupInfo.originalBatchId()),
-                dupInfo.originalBatchId()
+                    dupInfo.existingBatchId()),
+                dupInfo.existingBatchId()
             );
         }
     }

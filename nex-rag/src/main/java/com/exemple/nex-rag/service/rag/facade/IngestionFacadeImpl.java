@@ -7,7 +7,7 @@ import com.exemple.nexrag.dto.*;
 import com.exemple.nexrag.validation.FileValidator;
 import com.exemple.nexrag.exception.DuplicateFileException;
 import com.exemple.nexrag.service.rag.ingestion.IngestionOrchestrator;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.DeduplicationService;
+import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressService;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
 import lombok.RequiredArgsConstructor;

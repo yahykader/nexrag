@@ -5,7 +5,7 @@
 package com.exemple.nexrag.service.rag.ingestion;
 
 import com.exemple.nexrag.service.rag.ingestion.repository.EmbeddingRepository;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.DeduplicationService;
+import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
 import com.exemple.nexrag.dto.ScanResult;
 import com.exemple.nexrag.config.ClamAvProperties;
@@ -271,7 +271,7 @@ public class IngestionOrchestrator {
             
             // 2. VÉRIFICATION DOUBLON
             byte[] fileBytes = file.getBytes();
-            String fileHash = deduplicationService.calculateHash(fileBytes);
+            String fileHash = deduplicationService.computeHash(fileBytes);
 
             if (deduplicationService.isDuplicateAndRecord(fileHash, strategyName)) {
                 String existingBatchId = deduplicationService.getExistingBatchId(fileHash);
@@ -286,7 +286,7 @@ public class IngestionOrchestrator {
                 );
             }
             
-            deduplicationService.registerFile(fileHash, batchId, filename);
+            deduplicationService.markAsIngested(fileHash, batchId);
 
             // 3. INGESTION
             IngestionResult result = strategy.ingest(file, batchId);
@@ -416,8 +416,8 @@ public class IngestionOrchestrator {
     public boolean fileExists(MultipartFile file) {
         try {
             byte[] fileBytes = file.getBytes();
-            String fileHash = deduplicationService.calculateHash(fileBytes);
-            return deduplicationService.isDuplicate(fileHash);
+            String fileHash = deduplicationService.computeHash(fileBytes);
+            return deduplicationService.isDuplicateByHash(fileHash);
             
         } catch (Exception e) {
             log.error("❌ FileExists check error: {}", 
@@ -429,9 +429,9 @@ public class IngestionOrchestrator {
     public String getExistingBatchId(MultipartFile file) {
         try {
             byte[] fileBytes = file.getBytes();
-            String fileHash = deduplicationService.calculateHash(fileBytes);
+            String fileHash = deduplicationService.computeHash(fileBytes);
             
-            if (deduplicationService.isDuplicate(fileHash)) {
+            if (deduplicationService.isDuplicateByHash(fileHash)) {
                 String batchId = deduplicationService.getExistingBatchId(fileHash);
                 return batchId;
             }
@@ -478,7 +478,7 @@ public class IngestionOrchestrator {
     }
     
     public HealthReport getHealthReport() {
-        boolean redisHealthy = deduplicationService.isRedisAvailable();
+        boolean redisHealthy = deduplicationService.isHealthy();
         boolean antivirusHealthy = antivirusProps.isEnabled() ? 
             antivirusScanner.isAvailable() : true;
         ServiceStats stats = getStats();

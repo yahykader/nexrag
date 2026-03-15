@@ -1,7 +1,7 @@
 package com.exemple.nexrag.service.rag.facade;
 
 import com.exemple.nexrag.dto.DuplicateSummary;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.DeduplicationService;
+import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;

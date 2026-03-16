@@ -4,12 +4,13 @@
 // ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
+import com.exemple.nexrag.exception.IngestionException;
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
 import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
 import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import com.exemple.nexrag.service.rag.ingestion.deduplication.text.TextDeduplicationService;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
-import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
+import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
 import com.exemple.nexrag.service.rag.ingestion.util.MetadataSanitizer;
 import com.exemple.nexrag.service.rag.ingestion.util.StreamingFileReader;
@@ -118,7 +119,7 @@ public class TikaIngestionStrategy implements IngestionStrategy {
     }
     
     @Override
-    public IngestionResult ingest(MultipartFile file, String batchId) throws Exception {
+    public IngestionResult ingest(MultipartFile file, String batchId) throws IOException, IngestionException {
         String filename = file.getOriginalFilename();
         String extension = getExtension(filename);
         long fileSize = file.getSize();
@@ -195,7 +196,7 @@ public class TikaIngestionStrategy implements IngestionStrategy {
             }
             
             log.error("❌ [{}] Tika processing error: {}", getName(), filename, e);
-            throw e;
+            throw new IngestionException("Erreur inattendue Tika : " + e.getMessage(), e);
         }
     }
 

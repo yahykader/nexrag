@@ -4,13 +4,14 @@
 // ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
+import com.exemple.nexrag.exception.IngestionException;
 import com.exemple.nexrag.dto.deduplication.file.DuplicationInfo;
 import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.ImageSaver;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.VisionAnalyzer;
 import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
-import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
+import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
 import com.exemple.nexrag.service.rag.ingestion.util.FileUtils;
@@ -119,7 +120,7 @@ public class ImageIngestionStrategy implements IngestionStrategy {
     }
     
     @Override
-    public IngestionResult ingest(MultipartFile file, String batchId) throws Exception {
+    public IngestionResult ingest(MultipartFile file, String batchId) throws IOException, IngestionException {
         String filename = file.getOriginalFilename();
         String extension = getExtension(filename);
         
@@ -187,7 +188,7 @@ public class ImageIngestionStrategy implements IngestionStrategy {
             }
             
             log.error("❌ [{}] Image processing error: {}", getName(), filename, e);
-            throw e;
+            throw new IngestionException("Erreur inattendue Image : " + e.getMessage(), e);
         }
     }
     

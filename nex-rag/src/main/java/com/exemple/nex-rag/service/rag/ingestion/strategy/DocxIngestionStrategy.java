@@ -4,13 +4,14 @@
 // ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
+import com.exemple.nexrag.exception.IngestionException;
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
 import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.ImageSaver;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.VisionAnalyzer;
 import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import com.exemple.nexrag.service.rag.ingestion.deduplication.text.TextDeduplicationService;
-import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
+import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
 import com.exemple.nexrag.service.rag.ingestion.util.FileUtils;
 import com.exemple.nexrag.service.rag.ingestion.util.MetadataSanitizer;
@@ -115,7 +116,7 @@ public class DocxIngestionStrategy implements IngestionStrategy {
     }
 
     @Override
-    public IngestionResult ingest(MultipartFile file, String batchId) throws Exception {
+    public IngestionResult ingest(MultipartFile file, String batchId) throws IOException, IngestionException{
         String filename = file.getOriginalFilename();
         long fileSize = file.getSize();
         
@@ -195,7 +196,7 @@ public class DocxIngestionStrategy implements IngestionStrategy {
             }
             
             log.error("❌ [{}] DOCX processing error: {}", getName(), filename, e);
-            throw e;
+            throw new IngestionException("Erreur inattendue DOCX : " + e.getMessage(), e);
         }
     }
     

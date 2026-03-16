@@ -9,7 +9,7 @@ import com.exemple.nexrag.service.rag.ingestion.deduplication.file.Deduplication
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
 import com.exemple.nexrag.dto.ScanResult;
 import com.exemple.nexrag.config.ClamAvProperties;
-import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
+import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.security.AntivirusScanner;
 import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionStrategy;
 import com.exemple.nexrag.exception.DuplicateFileException;

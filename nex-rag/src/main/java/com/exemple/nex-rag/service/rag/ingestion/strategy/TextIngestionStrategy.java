@@ -1,24 +1,14 @@
-// ============================================================================
-// STRATEGY - TextIngestionStrategy.java
-// Stratégie d'ingestion pour fichiers texte avec streaming + RAGMetrics unifié
-// ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
+import com.exemple.nexrag.exception.IngestionException;
+import com.exemple.nexrag.dto.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
-import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.DeduplicationService;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.TextDeduplicationService;
-import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
-import com.exemple.nexrag.service.rag.ingestion.model.IngestionResult;
-import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.EmbeddingIndexer;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.IngestionLifecycle;
 import com.exemple.nexrag.service.rag.ingestion.util.MetadataSanitizer;
 import com.exemple.nexrag.service.rag.ingestion.util.StreamingFileReader;
-import com.exemple.nexrag.service.rag.ingestion.validation.FileSignatureValidator;
-import com.exemple.nexrag.exception.DuplicateFileException;
 import dev.langchain4j.data.document.Metadata;
-import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -35,406 +25,249 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Stratégie d'ingestion pour fichiers texte
- * 
- * ✅ ADAPTÉ AVEC RAGMetrics unifié
- * 
- * Fonctionnalités:
- * - Streaming pour gros fichiers (>100MB)
- * - Support 40+ formats texte/code/data
- * - Détection automatique d'encodage (UTF-8, ISO-8859-1)
- * - Détection type de contenu
- * - Chunking adaptatif selon le type
- * - Progress temps réel via ProgressNotifier
- * - Déduplication fichier + texte
- * - Métriques Prometheus via RAGMetrics
- * - Cache embeddings
- * 
- * @author RAG Team
- * @version 3.0 - Adapté avec RAGMetrics unifié
+ * Stratégie d'ingestion pour fichiers texte (40+ formats).
+ *
+ * Principe SRP  : unique responsabilité → lire, détecter le type et découper
+ *                 le contenu texte. Le chunking adaptatif et les métadonnées
+ *                 par type sont propres à cette stratégie — ils restent ici.
+ *                 L'indexation embeddings est dans {@link EmbeddingIndexer}.
+ *                 Le cycle de vie est dans {@link IngestionLifecycle}.
+ * Principe DIP  : dépend des abstractions des services partagés.
+ * Clean code    : supprime {@code indexText()}, {@code truncate()},
+ *                 le bloc catch et le bloc post-ingestion dupliqués.
+ *                 {@code chunkAndIndexText()} est conservé car les métadonnées
+ *                 par chunk sont dynamiques (linesOfCode, hasHeaders, rows…)
+ *                 et ne peuvent pas être portées par {@link com.exemple.nexrag.service.rag.ingestion.strategy.commun.TextChunker}.
+ *
+ * @author ayhayoui
+ * @version 2.0
  */
 @Slf4j
 @Component
 public class TextIngestionStrategy implements IngestionStrategy {
-    
+
+    // -------------------------------------------------------------------------
+    // Dépendances spécifiques TEXT
+    // -------------------------------------------------------------------------
     private final EmbeddingStore<TextSegment> textStore;
-    private final EmbeddingModel embeddingModel;
-    private final IngestionTracker tracker;
-    private final MetadataSanitizer sanitizer;
-    private final RAGMetrics ragMetrics;  // ✅ Métriques unifiées
-    private final DeduplicationService deduplicationService;
-    private final TextDeduplicationService textDeduplicationService;
-    private final FileSignatureValidator signatureValidator;
-    private final EmbeddingCache embeddingCache;
-    
+    private final MetadataSanitizer           sanitizer;
+
+    // -------------------------------------------------------------------------
+    // Services partagés
+    // -------------------------------------------------------------------------
+    private final EmbeddingIndexer   embeddingIndexer;
+    private final IngestionLifecycle lifecycle;
+
     @Autowired(required = false)
     private ProgressNotifier progressNotifier;
-    
+
+    // -------------------------------------------------------------------------
+    // Formats supportés
+    // -------------------------------------------------------------------------
+
     private static final Set<String> SUPPORTED_EXTENSIONS = Set.of(
-        // Texte basique
         "txt", "text", "log",
-        // Markdown
         "md", "markdown",
-        // Data
         "csv", "tsv", "json", "xml", "yaml", "yml",
-        // Web
         "html", "htm", "css",
-        // Code
         "java", "py", "js", "ts", "jsx", "tsx",
         "c", "cpp", "h", "hpp",
         "go", "rs", "rb", "php",
         "swift", "kt", "kts",
         "sql", "sh", "bash", "zsh",
-        // Config
         "properties", "conf", "config", "ini", "env",
-        // Documentation
         "rst", "adoc", "tex"
     );
-    
+
     private static final Set<String> CODE_EXTENSIONS = Set.of(
         "java", "py", "js", "ts", "jsx", "tsx",
         "c", "cpp", "h", "hpp", "go", "rs", "rb",
         "php", "swift", "kt", "kts", "sql"
     );
-    
+
     public TextIngestionStrategy(
             @Qualifier("textEmbeddingStore") EmbeddingStore<TextSegment> textStore,
-            EmbeddingModel embeddingModel,
-            IngestionTracker tracker,
-            MetadataSanitizer sanitizer,
-            RAGMetrics ragMetrics,  // ✅ Injection RAGMetrics
-            DeduplicationService deduplicationService,
-            TextDeduplicationService textDeduplicationService,
-            FileSignatureValidator signatureValidator,
-            EmbeddingCache embeddingCache) {
-        
-        this.textStore = textStore;
-        this.embeddingModel = embeddingModel;
-        this.tracker = tracker;
-        this.sanitizer = sanitizer;
-        this.ragMetrics = ragMetrics;  // ✅ Utilisation metrics unifié
-        this.deduplicationService = deduplicationService;
-        this.textDeduplicationService = textDeduplicationService;
-        this.signatureValidator = signatureValidator;
-        this.embeddingCache = embeddingCache;
-        
-        log.info("✅ [{}] Strategy initialisée avec streaming + RAGMetrics (40+ formats)", 
-            getName());
+            MetadataSanitizer  sanitizer,
+            EmbeddingIndexer   embeddingIndexer,
+            IngestionLifecycle lifecycle) {
+
+        this.textStore       = textStore;
+        this.sanitizer       = sanitizer;
+        this.embeddingIndexer = embeddingIndexer;
+        this.lifecycle       = lifecycle;
+
+        log.info("✅ [{}] Strategy initialisée (40+ formats)", getName());
     }
-    
+
+    // -------------------------------------------------------------------------
+    // IngestionStrategy API
+    // -------------------------------------------------------------------------
+
     @Override
     public boolean canHandle(MultipartFile file, String extension) {
         return SUPPORTED_EXTENSIONS.contains(extension.toLowerCase());
     }
-    
+
     @Override
-    public IngestionResult ingest(MultipartFile file, String batchId) throws Exception {
-        String filename = file.getOriginalFilename();
+    public IngestionResult ingest(MultipartFile file, String batchId)
+            throws IOException, IngestionException {
+
+        String filename  = file.getOriginalFilename();
         String extension = getExtension(filename);
-        long fileSize = file.getSize();
-        
-        long startTime = System.currentTimeMillis();
-        
+        long   startTime = System.currentTimeMillis();
+
         try {
-            if (progressNotifier != null) {
-                progressNotifier.uploadStarted(batchId, filename, fileSize);
+            notify(n -> n.uploadStarted(batchId, filename, file.getSize()));
+            log.info("📄 [{}] Traitement texte : {} ({} MB, ext: {})",
+                getName(), filename, file.getSize() / 1_000_000, extension.toUpperCase());
+
+            if (file.isEmpty() || file.getSize() == 0) {
+                throw new IOException("Fichier texte vide : " + filename);
             }
-            
-            log.info("📄 [{}] Processing text file: {} ({} MB, ext: {})", 
-                getName(), filename, fileSize / 1_000_000, extension.toUpperCase());
-            
-            if (file.isEmpty() || fileSize == 0) {
-                if (progressNotifier != null) {
-                    progressNotifier.error(batchId, filename, "Empty file");
-                }
-                throw new IOException("Empty text file: " + filename);
-            }
-            
-            if (progressNotifier != null) {
-                progressNotifier.uploadCompleted(batchId, filename);
-            }
-            
-            if (progressNotifier != null) {
-                progressNotifier.processingStarted(batchId, filename);
-            }
-            
-            IngestionResult result;
-            
-            if (StreamingFileReader.requiresStreaming(file)) {
-                log.info("📖 [{}] STREAMING enabled: {} MB", 
-                    getName(), fileSize / 1_000_000);
-                result = ingestWithStreaming(file, filename, extension, batchId, fileSize);
-            } else {
-                log.debug("📄 [{}] Normal mode: {} MB", 
-                    getName(), fileSize / 1_000_000);
-                result = ingestNormal(file, filename, extension, batchId, fileSize);
-            }
-            
-            // ✅ AJOUT: Cleanup local cache + stats
-            textDeduplicationService.clearLocalCache();
-            var dedupStats = textDeduplicationService.getStats(batchId);
-            log.info("📊 [Dedup] Stats - Total indexés: {}, Cache local: {}", 
-                dedupStats.totalIndexed(), dedupStats.localCacheSize());
-            
-            long duration = System.currentTimeMillis() - startTime;
-            
-            ragMetrics.recordStrategyProcessing(
-                getName(),
-                duration,
-                result.textEmbeddings()
-            );
-            
-            if (progressNotifier != null) {
-                progressNotifier.completed(batchId, filename, result.textEmbeddings(), 0);
-            }
-            
-            log.info("✅ [{}] Text file processed: {} - {} chunks, duration={}ms mode={}",
-                getName(), filename, result.textEmbeddings(), duration,
-                StreamingFileReader.requiresStreaming(file) ? "STREAMING" : "NORMAL");
-            
+
+            notify(n -> n.uploadCompleted(batchId, filename));
+            notify(n -> n.processingStarted(batchId, filename));
+
+            IngestionResult result = StreamingFileReader.requiresStreaming(file)
+                ? ingestWithStreaming(file, filename, extension, batchId, file.getSize())
+                : ingestNormal(file, filename, extension, batchId, file.getSize());
+
+            lifecycle.onSuccess(getName(), batchId, filename, result,
+                System.currentTimeMillis() - startTime, progressNotifier);
+
+            log.info("✅ [{}] Texte traité : {} — {} chunks",
+                getName(), filename, result.textEmbeddings());
+
             return result;
-            
+
         } catch (Exception e) {
-            // ✅ AJOUT: Cleanup local cache même en cas d'erreur
-            textDeduplicationService.clearLocalCache();
-            
-            if (progressNotifier != null) {
-                progressNotifier.error(batchId, filename, e.getMessage());
-            }
-            
-            log.error("❌ [{}] Processing error: {}", getName(), filename, e);
-            throw e;
+            lifecycle.onError(getName(), batchId, filename, e, progressNotifier);
+            throw new IngestionException("Erreur TEXT : " + e.getMessage(), e);
         }
-    }   
-    private IngestionResult ingestNormal(MultipartFile file, String filename,
-                                          String extension, String batchId,
-                                          long fileSize) throws Exception {
-        
-        // Progress - Processing
-        if (progressNotifier != null) {
-            progressNotifier.processingStarted(batchId, filename);
-        }
-        
-        // Progress - Reading
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "READING", 20, 
-                "Reading content...");
-        }
-        
-        String content = readTextWithEncodingDetection(file.getBytes(), filename);
-        
-        if (content == null || content.isBlank()) {
-            throw new IllegalArgumentException("File without content: " + filename);
-        }
-        
-        return processContent(content, filename, extension, batchId, fileSize);
     }
-    
+
+    @Override
+    public String getName()     { return "TEXT"; }
+    @Override
+    public int    getPriority() { return 8; }
+
+    // -------------------------------------------------------------------------
+    // Utilitaires statiques
+    // -------------------------------------------------------------------------
+
+    public static Set<String> getSupportedExtensions() { return Set.copyOf(SUPPORTED_EXTENSIONS); }
+    public static boolean     isSupported(String ext)  { return SUPPORTED_EXTENSIONS.contains(ext.toLowerCase()); }
+
+    // -------------------------------------------------------------------------
+    // Routage streaming / normal
+    // -------------------------------------------------------------------------
+
+    private IngestionResult ingestNormal(MultipartFile file, String filename,
+                                          String extension, String batchId, long fileSize)
+            throws Exception {
+
+        notify(n -> n.notifyProgress(batchId, filename, "READING", 20, "Lecture..."));
+        String content = readWithEncodingDetection(file.getBytes(), filename);
+
+        if (content == null || content.isBlank()) {
+            throw new IngestionException("Fichier sans contenu : " + filename);
+        }
+
+        return processContent(content, filename, extension, batchId);
+    }
+
     private IngestionResult ingestWithStreaming(MultipartFile file, String filename,
-                                                 String extension, String batchId,
-                                                 long fileSize) throws Exception {
-        
+                                                 String extension, String batchId, long fileSize)
+            throws Exception {
+
         Path tempFile = null;
-        
         try {
-            // Progress - Streaming
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "STREAMING", 15, 
-                    "Loading in streaming...");
-            }
-            
-            log.debug("💾 [{}] Creating temp file...", getName());
+            notify(n -> n.notifyProgress(batchId, filename, "STREAMING", 15,
+                "Chargement en streaming..."));
+
             tempFile = StreamingFileReader.saveToTempFileWithProgress(file, bytesWritten -> {
-                if (bytesWritten % (50 * 1024 * 1024) == 0) {
-                    log.info("📊 [{}] Saved: {} MB", getName(), bytesWritten / 1_000_000);
-                    
-                    if (progressNotifier != null) {
-                        int percentage = 15 + (int)((bytesWritten / (double)fileSize) * 10);
-                        progressNotifier.notifyProgress(batchId, filename, "STREAMING", percentage, 
-                            String.format("Loading: %d MB", bytesWritten / 1_000_000));
-                    }
+                if (bytesWritten % (50 * 1024 * 1024) == 0 && progressNotifier != null) {
+                    int pct = 15 + (int)((bytesWritten / (double)fileSize) * 10);
+                    progressNotifier.notifyProgress(batchId, filename, "STREAMING", pct,
+                        String.format("Chargement : %d MB", bytesWritten / 1_000_000));
                 }
             });
-            
-            log.info("✅ [{}] Temp file created: {}", getName(), tempFile);
-            
-            // Progress - Reading
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "READING", 25, 
-                    "Reading content...");
-            }
-            
-            byte[] bytes = Files.readAllBytes(tempFile);
-            String content = readTextWithEncodingDetection(bytes, filename);
-            
+
+            notify(n -> n.notifyProgress(batchId, filename, "READING", 25, "Lecture..."));
+            String content = readWithEncodingDetection(Files.readAllBytes(tempFile), filename);
+
             if (content == null || content.isBlank()) {
-                throw new IllegalArgumentException("File without content: " + filename);
+                throw new IngestionException("Fichier sans contenu : " + filename);
             }
-            
-            return processContent(content, filename, extension, batchId, fileSize);
-            
+
+            return processContent(content, filename, extension, batchId);
+
         } finally {
             if (tempFile != null) {
-                try {
-                    Files.deleteIfExists(tempFile);
-                    log.debug("🗑️ [{}] Temp file deleted", getName());
-                } catch (IOException e) {
-                    log.warn("⚠️ [{}] Cannot delete temp file: {}", getName(), e.getMessage());
-                }
+                try { Files.deleteIfExists(tempFile); }
+                catch (IOException e) { log.warn("⚠️ Impossible de supprimer le temp : {}", e.getMessage()); }
             }
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Traitement du contenu
+    // -------------------------------------------------------------------------
+
     private IngestionResult processContent(String content, String filename,
-                                            String extension, String batchId,
-                                            long fileSize) throws Exception {
-        
-        log.debug("📝 [{}] Content extracted: {} characters", getName(), content.length());
-        
-        // Progress - Content analysis
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "ANALYSIS", 30, 
-                "Content analysis...");
-        }
-        
+                                            String extension, String batchId) {
+
+        notify(n -> n.notifyProgress(batchId, filename, "ANALYSIS", 30, "Analyse..."));
         String contentType = detectContentType(content, extension);
-        
-        log.info("🔍 [{}] Detected type: {}", getName(), contentType);
-        
-        // Progress - Chunking
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "CHUNKING", 40, 
-                "Text chunking...");
+        log.info("🔍 [{}] Type détecté : {}", getName(), contentType);
+
+        notify(n -> n.notifyProgress(batchId, filename, "CHUNKING", 40, "Découpage..."));
+        ChunkConfig config = getChunkConfig(contentType);
+
+        log.debug("📏 [{}] Config : taille={} overlap={} (type: {})",
+            getName(), config.size(), config.overlap(), contentType);
+
+        ChunkResult result = chunkAndIndex(
+            content, filename, extension, contentType, config, batchId
+        );
+
+        if (result.duplicates() > 0) {
+            log.info("⏭️ [Dedup] {} doublons ignorés, {} indexés",
+                result.duplicates(), result.indexed());
         }
 
-        var chunkResult = chunkAndIndexText(content, filename, extension, contentType, batchId);
-        int textEmbeddings = chunkResult.indexed();
-        int duplicates = chunkResult.duplicates();
-        
-        if (duplicates > 0) {
-            log.info("⏭️ [Dedup] {} duplicates skipped, {} new indexed", 
-                duplicates, textEmbeddings);
-        }
-        
-        Map<String, Object> resultMetadata = new HashMap<>();
-        resultMetadata.put("strategy", getName());
-        resultMetadata.put("filename", filename);
-        resultMetadata.put("extension", extension);
-        resultMetadata.put("contentType", contentType);
-        resultMetadata.put("characters", content.length());
-        
-        return new IngestionResult(textEmbeddings, 0, resultMetadata);
+        return new IngestionResult(result.indexed(), 0, Map.of(
+            "strategy",    getName(),
+            "filename",    filename,
+            "extension",   extension,
+            "contentType", contentType,
+            "characters",  content.length()
+        ));
     }
-    
-    private String readTextWithEncodingDetection(byte[] bytes, String filename) 
-            throws IOException {
-        
-        try {
-            String content = new String(bytes, StandardCharsets.UTF_8);
-            
-            if (!content.contains("\uFFFD")) {
-                log.debug("✓ [{}] Encoding detected: UTF-8", getName());
-                return content;
-            }
-            
-        } catch (Exception e) {
-            log.debug("⚠️ [{}] UTF-8 read failed", getName());
-        }
-        
-        try {
-            String content = new String(bytes, "ISO-8859-1");
-            log.debug("✓ [{}] Encoding detected: ISO-8859-1 (fallback)", getName());
-            return content;
-            
-        } catch (Exception e) {
-            throw new IOException("Cannot read file: " + filename, e);
-        }
-    }
-    
-    private String detectContentType(String content, String extension) {
-        
-        if ("json".equals(extension) || content.trim().startsWith("{") || 
-            content.trim().startsWith("[")) {
-            return "json";
-        }
-        
-        if ("xml".equals(extension) || "html".equals(extension) || "htm".equals(extension) ||
-            content.trim().startsWith("<")) {
-            return extension.equals("html") || extension.equals("htm") ? "html" : "xml";
-        }
-        
-        if ("csv".equals(extension) || "tsv".equals(extension)) {
-            return "csv";
-        }
-        
-        if ("md".equals(extension) || "markdown".equals(extension)) {
-            return "markdown";
-        }
-        
-        if (CODE_EXTENSIONS.contains(extension)) {
-            return "code_" + extension;
-        }
-        
-        if ("yaml".equals(extension) || "yml".equals(extension)) {
-            return "yaml";
-        }
-        
-        if ("properties".equals(extension) || "conf".equals(extension) || 
-            "config".equals(extension) || "ini".equals(extension) || "env".equals(extension)) {
-            return "config";
-        }
-        
-        if ("rst".equals(extension) || "adoc".equals(extension) || "tex".equals(extension)) {
-            return "documentation";
-        }
-        
-        return "text";
-    }
-    
-    private record ChunkResult(int indexed, int duplicates) {}
 
-    private ChunkResult chunkAndIndexText(String content, String filename, String extension,
-                                    String contentType, String batchId) {
-        int indexed = 0;
+    // -------------------------------------------------------------------------
+    // Chunking adaptatif avec métadonnées par chunk dynamiques
+    //
+    // Note : TextChunker n'est pas utilisé ici car les métadonnées par chunk
+    // dépendent du contenu du chunk (linesOfCode, hasHeaders, rows…).
+    // EmbeddingIndexer est utilisé pour l'indexation.
+    // -------------------------------------------------------------------------
+
+    private ChunkResult chunkAndIndex(String content, String filename,
+                                       String extension, String contentType,
+                                       ChunkConfig config, String batchId) {
+
+        int indexed    = 0;
         int duplicates = 0;
         int chunkIndex = 0;
-        
-        ChunkConfig config = getChunkConfig(contentType);
-        
-        log.debug("📏 [{}] Chunking config: size={} overlap={} (type: {})",
-            getName(), config.size, config.overlap, contentType);
-        
-        int estimatedChunks = content.length() <= config.size ? 1 : 
-            (int) Math.ceil(content.length() / (double)(config.size - config.overlap));
-    
-        if (content.length() <= config.size) {
-            Map<String, Object> meta = new HashMap<>();
-            meta.put("source", filename);
-            meta.put("extension", extension);
-            meta.put("type", contentType);
-            meta.put("chunkIndex", chunkIndex);
-            meta.put("batchId", batchId);
-            
-            addTypeSpecificMetadata(meta, content.trim(), contentType);
-            
-            Metadata metadata = Metadata.from(sanitizer.sanitize(meta));
-            
-            // Progress embedding
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "EMBEDDING", 50, 
-                    "Creating embedding...");
-            }
+        int estimated  = content.length() <= config.size() ? 1
+            : (int) Math.ceil(content.length() / (double)(config.size() - config.overlap()));
 
-            String embeddingId = indexText(content.trim(), metadata, batchId);
-
-            if (embeddingId != null) {
-                tracker.addTextEmbeddingId(batchId, embeddingId);
-                
-                // Progress terminé
-                if (progressNotifier != null) {
-                    progressNotifier.embeddingProgress(batchId, filename, 1, 1);
-                }
-                
+        if (content.length() <= config.size()) {
+            notify(n -> n.notifyProgress(batchId, filename, "EMBEDDING", 50, "Embedding..."));
+            String id = indexChunk(content.trim(), filename, extension, contentType, 0, batchId);
+            if (id != null) {
+                notify(n -> n.embeddingProgress(batchId, filename, 1, 1));
                 return new ChunkResult(1, 0);
             }
             return new ChunkResult(0, 1);
@@ -442,185 +275,146 @@ public class TextIngestionStrategy implements IngestionStrategy {
 
         int start = 0;
         while (start < content.length()) {
-            int end = Math.min(start + config.size, content.length());
+            int    end   = Math.min(start + config.size(), content.length());
             String chunk = content.substring(start, end).trim();
-            
-            if (chunk.length() > 10) {
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("source", filename);
-                meta.put("extension", extension);
-                meta.put("type", contentType);
-                meta.put("chunkIndex", chunkIndex);
-                meta.put("batchId", batchId);
-                
-                addTypeSpecificMetadata(meta, chunk, contentType);
-                
-                Metadata metadata = Metadata.from(sanitizer.sanitize(meta));
 
-                String embeddingId = indexText(chunk, metadata, batchId);
-                
-                if (embeddingId != null) {
-                    tracker.addTextEmbeddingId(batchId, embeddingId);
+            if (chunk.length() > 10) {
+                String id = indexChunk(chunk, filename, extension, contentType, chunkIndex, batchId);
+                if (id != null) {
                     indexed++;
-                    
-                    // Progress tous les 10 chunks
-                    if (indexed % 10 == 0 || indexed == estimatedChunks) {
-                        if (progressNotifier != null) {
-                            progressNotifier.embeddingProgress(batchId, filename, 
-                                indexed, estimatedChunks);
-                        }
+                    if (indexed % 10 == 0 || indexed == estimated) {
+                        final int cur = indexed, tot = estimated;
+                        notify(n -> n.embeddingProgress(batchId, filename, cur, tot));
                     }
                 } else {
                     duplicates++;
                 }
-                
                 chunkIndex++;
             }
-            
-            start += Math.max(1, config.size - config.overlap);
+
+            start += Math.max(1, config.size() - config.overlap());
         }
-        
-        log.info("✅ [{}] {} chunks indexed ({} duplicates skipped)", 
-            getName(), indexed, duplicates);
-        
+
+        log.info("✅ [{}] {} chunks indexés ({} doublons ignorés)", getName(), indexed, duplicates);
         return new ChunkResult(indexed, duplicates);
     }
-    
+
+    /**
+     * Indexe un chunk via {@link EmbeddingIndexer} avec les métadonnées enrichies
+     * par type de contenu (spécifique à TEXT — dynamique par chunk).
+     */
+    private String indexChunk(String chunk, String filename, String extension,
+                               String contentType, int chunkIndex, String batchId) {
+
+        Map<String, Object> meta = new HashMap<>();
+        meta.put("source",     filename);
+        meta.put("extension",  extension);
+        meta.put("type",       contentType);
+        meta.put("chunkIndex", chunkIndex);
+        meta.put("batchId",    batchId);
+
+        addTypeSpecificMetadata(meta, chunk, contentType);
+
+        Metadata metadata = Metadata.from(sanitizer.sanitize(meta));
+        return embeddingIndexer.indexText(chunk, metadata, batchId, textStore);
+    }
+
+    // -------------------------------------------------------------------------
+    // Détection encodage
+    // -------------------------------------------------------------------------
+
+    private String readWithEncodingDetection(byte[] bytes, String filename) throws IOException {
+        try {
+            String content = new String(bytes, StandardCharsets.UTF_8);
+            if (!content.contains("\uFFFD")) {
+                log.debug("✓ [{}] Encodage : UTF-8", getName());
+                return content;
+            }
+        } catch (Exception ignored) {}
+
+        try {
+            String content = new String(bytes, "ISO-8859-1");
+            log.debug("✓ [{}] Encodage : ISO-8859-1 (fallback)", getName());
+            return content;
+        } catch (Exception e) {
+            throw new IOException("Impossible de lire le fichier : " + filename, e);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Détection type de contenu
+    // -------------------------------------------------------------------------
+
+    private String detectContentType(String content, String extension) {
+        String trimmed = content.trim();
+
+        if ("json".equals(extension) || trimmed.startsWith("{") || trimmed.startsWith("["))
+            return "json";
+        if ("xml".equals(extension) || "html".equals(extension) || "htm".equals(extension)
+                || trimmed.startsWith("<"))
+            return "html".equals(extension) || "htm".equals(extension) ? "html" : "xml";
+        if ("csv".equals(extension)  || "tsv".equals(extension))  return "csv";
+        if ("md".equals(extension)   || "markdown".equals(extension)) return "markdown";
+        if (CODE_EXTENSIONS.contains(extension)) return "code_" + extension;
+        if ("yaml".equals(extension) || "yml".equals(extension))   return "yaml";
+        if (Set.of("properties", "conf", "config", "ini", "env").contains(extension))
+            return "config";
+        if (Set.of("rst", "adoc", "tex").contains(extension)) return "documentation";
+        return "text";
+    }
+
+    // -------------------------------------------------------------------------
+    // Configuration chunking adaptative par type
+    // -------------------------------------------------------------------------
+
     private ChunkConfig getChunkConfig(String contentType) {
-        
-        if (contentType.startsWith("code_")) {
-            return new ChunkConfig(1500, 200);
-        }
-        
-        if (contentType.equals("json") || contentType.equals("xml")) {
-            return new ChunkConfig(800, 100);
-        }
-        
-        if (contentType.equals("csv")) {
-            return new ChunkConfig(1200, 50);
-        }
-        
-        if (contentType.equals("markdown")) {
-            return new ChunkConfig(1000, 100);
-        }
-        
+        if (contentType.startsWith("code_"))                          return new ChunkConfig(1500, 200);
+        if ("json".equals(contentType) || "xml".equals(contentType)) return new ChunkConfig(800,  100);
+        if ("csv".equals(contentType))                                return new ChunkConfig(1200, 50);
+        if ("markdown".equals(contentType))                           return new ChunkConfig(1000, 100);
         return new ChunkConfig(1000, 100);
     }
-    
-    private void addTypeSpecificMetadata(Map<String, Object> meta, String chunk, 
-                                          String contentType) {
-        
+
+    // -------------------------------------------------------------------------
+    // Métadonnées dynamiques par chunk (spécifiques TEXT — dépendent du contenu)
+    // -------------------------------------------------------------------------
+
+    private void addTypeSpecificMetadata(Map<String, Object> meta, String chunk, String contentType) {
         if (contentType.startsWith("code_")) {
-            String language = contentType.substring(5);
-            meta.put("language", language);
-            
-            int lines = chunk.split("\n").length;
-            meta.put("linesOfCode", lines);
+            meta.put("language",    contentType.substring(5));
+            meta.put("linesOfCode", chunk.split("\n").length);
         }
-        
-        if (contentType.equals("csv")) {
-            int rows = chunk.split("\n").length;
-            meta.put("rows", rows);
+        if ("csv".equals(contentType)) {
+            meta.put("rows",   chunk.split("\n").length);
             meta.put("format", "csv");
         }
-        
-        if (contentType.equals("json")) {
-            meta.put("format", "json");
-        }
-        
-        if (contentType.equals("markdown")) {
-            boolean hasHeaders = chunk.contains("#");
-            meta.put("hasHeaders", hasHeaders);
-        }
+        if ("json".equals(contentType))     meta.put("format",     "json");
+        if ("markdown".equals(contentType)) meta.put("hasHeaders", chunk.contains("#"));
     }
-    
-    private String indexText(String text, Metadata metadata, String batchId) {
-        
-        if (!textDeduplicationService.checkAndMark(text, batchId)) {
-            log.debug("⏭️ [Dedup] Duplicate text, skip: {}", truncate(text, 50));
-            return null;
-        }
-        
-        log.debug("✅ [Dedup] New text, indexing: {}", truncate(text, 50));
-        
-        TextSegment segment = TextSegment.from(text, metadata);
-        
-        // ✅ MODIFIÉ: Utiliser getAndTrack + put avec batchId
-        Embedding embedding = embeddingCache.getAndTrack(text, batchId);
-        
-        if (embedding == null) {
-            // Cache miss - Créer l'embedding
-            long apiStart = System.currentTimeMillis();
-            embedding = embeddingModel.embed(text).content();
-            long apiDuration = System.currentTimeMillis() - apiStart;
-            
-            // ✅ MÉTRIQUE: Embedding API call (INCHANGÉE)
-            ragMetrics.recordApiCall("embed_text", apiDuration);
-            
-            // ✅ NOUVEAU: Stocker avec tracking batch
-            embeddingCache.put(text, embedding, batchId);
-        }
-        
-        long storeStart = System.currentTimeMillis();
-        String embeddingId = textStore.add(embedding, segment);
-        long storeDuration = System.currentTimeMillis() - storeStart;
-        
-        // ✅ MÉTRIQUE: Vector store operation
-        ragMetrics.recordVectorStoreOperation("insert", storeDuration, 1);
-        
-        return embeddingId;
-    }
-    
+
+    // -------------------------------------------------------------------------
+    // Utilitaires
+    // -------------------------------------------------------------------------
+
     private String getExtension(String filename) {
-        if (filename == null || filename.isBlank()) {
-            return "unknown";
-        }
-        
-        int lastDot = filename.lastIndexOf('.');
-        if (lastDot == -1 || lastDot == filename.length() - 1) {
-            return "unknown";
-        }
-        
-        return filename.substring(lastDot + 1).toLowerCase();
+        if (filename == null || filename.isBlank()) return "unknown";
+        int dot = filename.lastIndexOf('.');
+        return (dot == -1 || dot == filename.length() - 1)
+            ? "unknown"
+            : filename.substring(dot + 1).toLowerCase();
     }
 
-    private String truncate(String text, int maxLength) {
-        if (text == null || text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "...";
+    @FunctionalInterface
+    private interface NotifierAction { void execute(ProgressNotifier n); }
+
+    private void notify(NotifierAction action) {
+        if (progressNotifier != null) action.execute(progressNotifier);
     }
-    
-    @Override
-    public String getName() {
-        return "TEXT";
-    }
-    
-    @Override
-    public int getPriority() {
-        return 8;
-    }
-    
+
+    // -------------------------------------------------------------------------
+    // Records internes
+    // -------------------------------------------------------------------------
+
     private record ChunkConfig(int size, int overlap) {}
-    
-    public static Set<String> getSupportedExtensions() {
-        return Set.copyOf(SUPPORTED_EXTENSIONS);
-    }
-    
-    public static boolean isSupported(String extension) {
-        return SUPPORTED_EXTENSIONS.contains(extension.toLowerCase());
-    }
+    private record ChunkResult(int indexed, int duplicates) {}
 }
-
-/*
- * Progress Steps for TEXT:
- * 5%   - Upload started
- * 10%  - Duplicate check
- * 12%  - Upload completed
- * 15-25% - Streaming (if >100MB)
- * 20-25% - Reading content
- * 30%  - Content analysis
- * 40%  - Text chunking
- * 50-90% - Embedding creation (detailed progress)
- * 100% - Completed
- */

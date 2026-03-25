@@ -1,16 +1,29 @@
 package com.exemple.nexrag.dto;
 
 import lombok.Builder;
-import lombok.Value;
+import lombok.Getter;
+import lombok.AllArgsConstructor;
 
 /**
- * Détail d'une stratégie d'ingestion.
- * Remplace {@code Map<String, Object>} non typé.
+ * Informations descriptives d'une stratégie d'ingestion.
+ *
+ * Clean code : @Builder pour la construction, accesseurs sans préfixe
+ *              pour rester compatibles avec les consommateurs existants.
  */
-@Value
+@Getter
 @Builder
+@AllArgsConstructor
 public class StrategyInfo {
-    String name;
-    int    priority;
-    String className;
+
+    private final String name;
+    private final int    priority;
+    private final String className;
+
+    // -------------------------------------------------------------------------
+    // Accesseurs style record — compatibles avec les consommateurs
+    // -------------------------------------------------------------------------
+
+    public String name()      { return name;      }
+    public int    priority()  { return priority;  }
+    public String className() { return className; }
 }

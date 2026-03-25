@@ -19,16 +19,16 @@ app:
     allowed-origins: http://localhost:4200
     max-age: 3600
     
-  libreoffice:
-    enabled: true
-    soffice-path: "C:\\Program Files\\LibreOffice\\program\\soffice.exe"               # Auto-détection si vide
-    timeoutSeconds: 60
+  # libreoffice:
+  #   enabled: true
+  #   soffice-path: "C:\\Program Files\\LibreOffice\\program\\soffice.exe"               # Auto-détection si vide
+  #   timeoutSeconds: 60
 
-  pdf:
-    save-generated: true
-    generated-pdf-dir: "${IMAGES_STORAGE_PATH:${user.home}/extracted-images}"
-    analyze-with-vision: true
-    render-dpi: 300
+  # pdf:
+  #   save-generated: true
+  #   generated-pdf-dir: "${IMAGES_STORAGE_PATH:${user.home}/extracted-images}"
+  #   analyze-with-vision: true
+  #   render-dpi: 300
 
 repository:
   delete:
@@ -265,39 +265,55 @@ vision:
   timeout-seconds: 30
   prompt: "Analysez cette image et fournissez une description détaillée de son contenu, y compris tout texte, objet, personne et contexte de la scène."
 
-# ============================================================================
+# ==============================================================================
 # DOCUMENTS - Configuration Ingestion
-# ============================================================================
+# ==============================================================================
 document:
-  max-file-size: 104857600        # 100 MB
+  max-file-size: 104857600          # 100 MB
   max-images-per-file: 100
-  max-pages-per-document: 500  
+  max-pages-per-document: 500
   max-pdf-pages-to-analyze: 100
-  
+ 
   images:
     storage-path: "${IMAGES_STORAGE_PATH:${user.home}/extracted-images}"
     min-width: 10
     max-width: 4096
     min-height: 10
     max-height: 4096
-  
+ 
   pdf:
     render-dpi: 150
     extract-embedded-images: true
     text-extraction-strategy: "auto"
-  
+ 
   docx:
     open-timeout-ms: 10000
     extract-headers-footers: true
-  
+ 
+  # ----------------------------------------------------------------------------
+  # XLSX — regroupe toutes les clés anciennement dans app.libreoffice.* et app.pdf.*
+  # ----------------------------------------------------------------------------
   xlsx:
+    max-images-per-file: 100
+    max-pdf-pages-to-analyze: 20
     evaluate-formulas: true
-    detect-charts: true             # ✨ Nouveau
-
+    detect-charts: true
+ 
+    libreoffice:
+      enabled: true
+      soffice-path: "C:\\Program Files\\LibreOffice\\program\\soffice.exe"  # vide = auto-détection
+      timeout-seconds: 60
+ 
+    pdf:
+      save-generated: true
+      generated-pdf-dir: "${IMAGES_STORAGE_PATH:${user.home}/extracted-images}"
+      analyze-with-vision: true
+      render-dpi: 300
+ 
   streaming:
-    threshold-mb: 100        # Activer streaming si > 100MB
-    chunk-size-mb: 10        # Taille chunks par défaut
-
+    threshold-mb: 100               # Activer streaming si > 100 MB
+    chunk-size-mb: 10
+ 
   enable-vision-cache: true
 
 # ============================================================================

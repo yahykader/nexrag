@@ -11,7 +11,7 @@ import com.exemple.nexrag.service.rag.ingestion.analyzer.ImageSaver;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.VisionAnalyzer;
 import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
-import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
+import com.exemple.nexrag.dto.IngestionResult;
 import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
 import com.exemple.nexrag.service.rag.ingestion.util.FileUtils;

@@ -1,7 +1,7 @@
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
 import com.exemple.nexrag.exception.IngestionException;
-import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
+import com.exemple.nexrag.dto.IngestionResult;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;

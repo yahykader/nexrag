@@ -200,17 +200,17 @@ public class CrudFacadeImpl implements CrudFacade {
     public SystemStatsResponse getSystemStats() {
         log.info("📊 getSystemStats");
 
-        var serviceStats  = ingestionOrchestrator.getStats();
-        var healthReport  = ingestionOrchestrator.getHealthReport();
+        var statsResponse  = ingestionOrchestrator.getStats();
+        var detailedHealthResponse  = ingestionOrchestrator.getHealthReport();
 
         return SystemStatsResponse.builder()
-            .totalStrategies(serviceStats.strategiesCount())
-            .activeIngestions(serviceStats.activeIngestions())
-            .trackedBatches(serviceStats.trackerBatches())
-            .totalEmbeddings(serviceStats.trackerEmbeddings())
-            .filesInProgress(serviceStats.filesInProgress())
-            .redisHealthy(healthReport.redisHealthy())
-            .systemStatus(healthReport.status())
+            .totalStrategies(statsResponse.strategiesCount())
+            .activeIngestions(statsResponse.activeIngestions())
+            .trackedBatches(statsResponse.trackerBatches())
+            .totalEmbeddings(statsResponse.trackerEmbeddings())
+            .filesInProgress(statsResponse.filesInProgress())
+            .redisHealthy(detailedHealthResponse.redisHealthy())
+            .systemStatus(detailedHealthResponse.status())
             .build();
     }
 }

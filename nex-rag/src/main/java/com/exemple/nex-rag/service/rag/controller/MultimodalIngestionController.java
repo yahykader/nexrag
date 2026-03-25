@@ -141,7 +141,7 @@ public class MultimodalIngestionController {
     @Operation(summary = "Health check détaillé")
     public ResponseEntity<DetailedHealthResponse> healthDetailed() {
         DetailedHealthResponse response = ingestionFacade.getDetailedHealth();
-        HttpStatus status = Boolean.TRUE.equals(response.getHealthy())
+        HttpStatus status = Boolean.TRUE.equals(response.isHealthy())
             ? HttpStatus.OK
             : HttpStatus.SERVICE_UNAVAILABLE;
         return ResponseEntity.status(status).body(response);

@@ -12,5 +12,5 @@ import java.util.List;
 @Builder
 public class ActiveIngestionsResponse {
     Integer                   count;
-    List<IngestionStatusInfo> ingestions;
+    List<IngestionStatus> ingestions;
 }

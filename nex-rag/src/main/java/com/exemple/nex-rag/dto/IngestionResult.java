@@ -1,4 +1,4 @@
-package com.exemple.nexrag.service.rag.ingestion.strategy;
+package com.exemple.nexrag.dto;
 
 import java.util.HashMap;
 import java.util.Map;

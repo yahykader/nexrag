@@ -1,28 +1,19 @@
-// ============================================================================
-// STRATEGY - DocxIngestionStrategy.java
-// Stratégie d'ingestion pour DOCX avec streaming + RAGMetrics unifié
-// ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
 import com.exemple.nexrag.exception.IngestionException;
-import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
-import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.ImageSaver;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.VisionAnalyzer;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.text.TextDeduplicationService;
-import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
-import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
+import com.exemple.nexrag.dto.IngestionResult;
+import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.EmbeddingIndexer;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.IngestionLifecycle;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.TextChunker;
 import com.exemple.nexrag.service.rag.ingestion.util.FileUtils;
 import com.exemple.nexrag.service.rag.ingestion.util.MetadataSanitizer;
 import com.exemple.nexrag.service.rag.ingestion.util.StreamingFileReader;
-import com.exemple.nexrag.validation.FileSignatureValidator;
 import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
-import com.exemple.nexrag.exception.DuplicateFileException;
-import dev.langchain4j.data.document.Metadata;
-import dev.langchain4j.data.embedding.Embedding;
+import com.exemple.nexrag.validation.FileSignatureValidator;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.xwpf.usermodel.*;
@@ -45,632 +36,385 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 /**
- * Stratégie d'ingestion pour fichiers DOCX
- * 
- * ✅ VERSION AVEC TRACKING EMBEDDINGS PAR BATCH
+ * Stratégie d'ingestion pour fichiers DOCX.
+ *
+ * Principe SRP  : unique responsabilité → extraire le contenu d'un DOCX.
+ *                 Le chunking est dans {@link TextChunker}.
+ *                 L'indexation est dans {@link EmbeddingIndexer}.
+ *                 Le cycle de vie est dans {@link IngestionLifecycle}.
+ * Principe DIP  : dépend des abstractions des 3 services partagés,
+ *                 pas de leurs implémentations.
+ * Clean code    : 12 dépendances → 9. Supprime indexText(),
+ *                 chunkAndIndexText(), truncate() et le bloc catch dupliqués.
+ *
+ * @author ayahyaoui
+ * @version 2.0
  */
 @Slf4j
 @Component
 public class DocxIngestionStrategy implements IngestionStrategy {
-    
+
+    // -------------------------------------------------------------------------
+    // Dépendances spécifiques DOCX
+    // -------------------------------------------------------------------------
     private final EmbeddingStore<TextSegment> textStore;
     private final EmbeddingStore<TextSegment> imageStore;
-    private final EmbeddingModel embeddingModel;
-    private final VisionAnalyzer visionAnalyzer;
-    private final ImageSaver imageSaver;
-    private final IngestionTracker tracker;
-    private final MetadataSanitizer sanitizer;
-    private final RAGMetrics ragMetrics;
-    private final DeduplicationService deduplicationService;
-    private final TextDeduplicationService textDeduplicationService;
-    private final FileSignatureValidator signatureValidator;
-    private final EmbeddingCache embeddingCache;
-    
+    private final VisionAnalyzer              visionAnalyzer;
+    private final ImageSaver                  imageSaver;
+    private final FileSignatureValidator      signatureValidator;
+    private final MetadataSanitizer           sanitizer;
+    private final RAGMetrics                  ragMetrics;
+
+    // -------------------------------------------------------------------------
+    // Services partagés (remplacent 6 dépendances dupliquées)
+    // -------------------------------------------------------------------------
+    private final EmbeddingIndexer   embeddingIndexer;
+    private final TextChunker        textChunker;
+    private final IngestionLifecycle lifecycle;
+
     @Autowired(required = false)
     private ProgressNotifier progressNotifier;
-    
+
     @Value("${document.max-images-per-file:100}")
     private int maxImagesPerFile;
-    
+
     @Value("${document.docx.timeout-seconds:300}")
     private int docxTimeoutSeconds;
-    
-    // Constructeur (INCHANGÉ)
+
     public DocxIngestionStrategy(
-            @Qualifier("textEmbeddingStore") EmbeddingStore<TextSegment> textStore,
+            @Qualifier("textEmbeddingStore")  EmbeddingStore<TextSegment> textStore,
             @Qualifier("imageEmbeddingStore") EmbeddingStore<TextSegment> imageStore,
-            EmbeddingModel embeddingModel,
-            VisionAnalyzer visionAnalyzer,
-            ImageSaver imageSaver,
-            IngestionTracker tracker,
-            MetadataSanitizer sanitizer,
-            RAGMetrics ragMetrics,
-            DeduplicationService deduplicationService,
-            TextDeduplicationService textDeduplicationService,
+            VisionAnalyzer         visionAnalyzer,
+            ImageSaver             imageSaver,
             FileSignatureValidator signatureValidator,
-            EmbeddingCache embeddingCache) {
-        
-        this.textStore = textStore;
-        this.imageStore = imageStore;
-        this.embeddingModel = embeddingModel;
-        this.visionAnalyzer = visionAnalyzer;
-        this.imageSaver = imageSaver;
-        this.tracker = tracker;
-        this.sanitizer = sanitizer;
-        this.ragMetrics = ragMetrics;
-        this.deduplicationService = deduplicationService;
-        this.textDeduplicationService = textDeduplicationService;
+            MetadataSanitizer      sanitizer,
+            RAGMetrics             ragMetrics,
+            EmbeddingIndexer       embeddingIndexer,
+            TextChunker            textChunker,
+            IngestionLifecycle     lifecycle) {
+
+        this.textStore          = textStore;
+        this.imageStore         = imageStore;
+        this.visionAnalyzer     = visionAnalyzer;
+        this.imageSaver         = imageSaver;
         this.signatureValidator = signatureValidator;
-        this.embeddingCache = embeddingCache;
-        
-        log.info("✅ [{}] Strategy initialisée avec streaming + tracking batch", getName());
+        this.sanitizer          = sanitizer;
+        this.ragMetrics         = ragMetrics;
+        this.embeddingIndexer   = embeddingIndexer;
+        this.textChunker        = textChunker;
+        this.lifecycle          = lifecycle;
+
+        log.info("✅ [{}] Strategy initialisée", getName());
     }
-    
-    // ========================================================================
-    // MÉTHODES PUBLIQUES (TOUTES INCHANGÉES)
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // IngestionStrategy API
+    // -------------------------------------------------------------------------
+
     @Override
     public boolean canHandle(MultipartFile file, String extension) {
         return "docx".equals(extension);
     }
 
     @Override
-    public IngestionResult ingest(MultipartFile file, String batchId) throws IOException, IngestionException{
-        String filename = file.getOriginalFilename();
-        long fileSize = file.getSize();
-        
-        long startTime = System.currentTimeMillis();
-        
+    public IngestionResult ingest(MultipartFile file, String batchId)
+            throws IOException, IngestionException {
+
+        String filename  = file.getOriginalFilename();
+        long   startTime = System.currentTimeMillis();
+
         try {
-            if (progressNotifier != null) {
-                progressNotifier.uploadStarted(batchId, filename, fileSize);
+            notify(n -> n.uploadStarted(batchId, filename, file.getSize()));
+            log.info("📘 [{}] Traitement DOCX : {} ({} MB)",
+                getName(), filename, file.getSize() / 1_000_000);
+
+            if (file.isEmpty() || file.getSize() == 0) {
+                throw new IOException("Fichier DOCX vide : " + filename);
             }
-            
-            log.info("📘 [{}] Processing DOCX: {} ({} MB)", 
-                getName(), filename, fileSize / 1_000_000);
-            
-            if (file.isEmpty() || fileSize == 0) {
-                if (progressNotifier != null) {
-                    progressNotifier.error(batchId, filename, "Empty file");
-                }
-                throw new IOException("Empty DOCX: " + filename);
-            }
-            
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "VALIDATION", 8, 
-                    "File validation...");
-            }
-            
+
+            notify(n -> n.notifyProgress(batchId, filename, "VALIDATION", 8, "Validation..."));
             signatureValidator.validate(file, "docx");
-            
-            if (progressNotifier != null) {
-                progressNotifier.processingStarted(batchId, filename);
-            }
-            
-            IngestionResult result;
-            
-            if (StreamingFileReader.requiresStreaming(file)) {
-                log.info("📖 [{}] STREAMING enabled: {} MB", 
-                    getName(), fileSize / 1_000_000);
-                result = ingestWithStreaming(file, filename, batchId);
-            } else {
-                log.debug("📄 [{}] Normal mode: {} MB", 
-                    getName(), fileSize / 1_000_000);
-                result = ingestNormal(file, filename, batchId);
-            }
-            
-            // ✅ AJOUT: Cleanup local cache + stats
-            textDeduplicationService.clearLocalCache();
-            var dedupStats = textDeduplicationService.getStats(batchId);
-            log.info("📊 [Dedup] Stats - Total indexés: {}, Cache local: {}", 
-            dedupStats.totalIndexed(), dedupStats.localCacheSize());
-            
-            long duration = System.currentTimeMillis() - startTime;
-            int totalEmbeddings = result.textEmbeddings() + result.imageEmbeddings();
-            
-            ragMetrics.recordStrategyProcessing(
-                getName(),
-                duration,
-                totalEmbeddings
-            );
-            
-            if (progressNotifier != null) {
-                progressNotifier.completed(batchId, filename, 
-                    result.textEmbeddings(), result.imageEmbeddings());
-            }
-            
-            log.info("✅ [{}] DOCX processed: {} - text={} images={} duration={}ms mode={}",
-                getName(), filename, result.textEmbeddings(), 
-                result.imageEmbeddings(), duration,
-                StreamingFileReader.requiresStreaming(file) ? "STREAMING" : "NORMAL");
-            
+            notify(n -> n.processingStarted(batchId, filename));
+
+            IngestionResult result = StreamingFileReader.requiresStreaming(file)
+                ? ingestWithStreaming(file, filename, batchId)
+                : ingestNormal(file, filename, batchId);
+
+            lifecycle.onSuccess(getName(), batchId, filename, result,
+                System.currentTimeMillis() - startTime, progressNotifier);
+
+            log.info("✅ [{}] DOCX traité : {} — text={} images={}",
+                getName(), filename, result.textEmbeddings(), result.imageEmbeddings());
+
             return result;
-            
+
         } catch (Exception e) {
-            // ✅ AJOUT: Cleanup local cache même en cas d'erreur
-            textDeduplicationService.clearLocalCache();
-            
-            if (progressNotifier != null) {
-                progressNotifier.error(batchId, filename, e.getMessage());
-            }
-            
-            log.error("❌ [{}] DOCX processing error: {}", getName(), filename, e);
-            throw new IngestionException("Erreur inattendue DOCX : " + e.getMessage(), e);
+            lifecycle.onError(getName(), batchId, filename, e, progressNotifier);
+            throw new IngestionException("Erreur DOCX : " + e.getMessage(), e);
         }
     }
-    
-    // ========================================================================
-    // MÉTHODES PRIVÉES - STREAMING (TOUTES INCHANGÉES)
-    // ========================================================================
-    
-    private IngestionResult ingestNormal(MultipartFile file, String filename, 
-                                          String batchId) throws Exception {
+
+    @Override
+    public String getName()     { return "DOCX"; }
+    @Override
+    public int    getPriority() { return 2; }
+
+    // -------------------------------------------------------------------------
+    // Routage streaming / normal
+    // -------------------------------------------------------------------------
+
+    private IngestionResult ingestNormal(MultipartFile file, String filename, String batchId)
+            throws Exception {
+
         try (InputStream is = file.getInputStream()) {
-            XWPFDocument document = openDocxWithTimeout(is, filename);
-            return processDocument(document, filename, batchId);
+            XWPFDocument doc = openDocxWithTimeout(is, filename);
+            return processDocument(doc, filename, batchId);
         }
     }
-    
-    private IngestionResult ingestWithStreaming(MultipartFile file, String filename, 
-                                                 String batchId) throws Exception {
+
+    private IngestionResult ingestWithStreaming(MultipartFile file, String filename, String batchId)
+            throws Exception {
+
         Path tempFile = null;
         try {
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "STREAMING", 18, 
-                    "Loading DOCX in streaming...");
-            }
-            
-            log.debug("💾 [{}] Creating temp file...", getName());
+            notify(n -> n.notifyProgress(batchId, filename, "STREAMING", 18,
+                "Chargement DOCX en streaming..."));
+
             tempFile = StreamingFileReader.saveToTempFileWithProgress(file, bytesWritten -> {
                 if (bytesWritten % (50 * 1024 * 1024) == 0) {
-                    log.info("📊 [{}] Saved: {} MB", 
-                        getName(), bytesWritten / 1_000_000);
+                    log.info("📊 [{}] Sauvegardé : {} MB", getName(), bytesWritten / 1_000_000);
                 }
             });
-            
+
             try (FileInputStream fis = new FileInputStream(tempFile.toFile())) {
-                XWPFDocument document = openDocxWithTimeout(fis, filename);
-                return processDocument(document, filename, batchId);
+                XWPFDocument doc = openDocxWithTimeout(fis, filename);
+                return processDocument(doc, filename, batchId);
             }
+
         } finally {
-            if (tempFile != null) {
-                Files.deleteIfExists(tempFile);
-            }
+            if (tempFile != null) Files.deleteIfExists(tempFile);
         }
     }
-    
-    private XWPFDocument openDocxWithTimeout(InputStream is, String filename) 
+
+    // -------------------------------------------------------------------------
+    // Ouverture DOCX avec timeout
+    // -------------------------------------------------------------------------
+
+    private XWPFDocument openDocxWithTimeout(InputStream is, String filename)
             throws IOException, TimeoutException {
-        
+
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             Future<XWPFDocument> future = executor.submit(() -> {
-                try {
-                    return new XWPFDocument(is);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
+                try { return new XWPFDocument(is); }
+                catch (IOException e) { throw new RuntimeException(e); }
             });
-            
+
             try {
                 return future.get(docxTimeoutSeconds, TimeUnit.SECONDS);
             } catch (TimeoutException e) {
                 future.cancel(true);
-                throw new TimeoutException("DOCX open timeout: " + filename);
+                throw new TimeoutException("Timeout ouverture DOCX : " + filename);
             } catch (ExecutionException e) {
                 Throwable cause = e.getCause();
-                if (cause instanceof IOException) {
-                    throw (IOException) cause;
-                }
-                throw new IOException("DOCX open error", cause);
+                if (cause instanceof IOException) throw (IOException) cause;
+                throw new IOException("Erreur ouverture DOCX", cause);
             }
+
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IOException("DOCX open interrupted", e);
+            throw new IOException("Ouverture DOCX interrompue", e);
         } finally {
             executor.shutdownNow();
         }
     }
-    
-    private IngestionResult processDocument(XWPFDocument document, String filename, 
-                                             String batchId) throws Exception {
+
+    // -------------------------------------------------------------------------
+    // Routage avec / sans images
+    // -------------------------------------------------------------------------
+
+    private IngestionResult processDocument(XWPFDocument doc, String filename, String batchId)
+            throws Exception {
+
         try {
-            boolean hasImages = hasImagesInDocument(document);
-            
-            if (hasImages) {
-                return processDocxWithImages(document, filename, batchId);
-            } else {
-                return processDocxTextOnly(document, filename, batchId);
-            }
+            return hasImagesInDocument(doc)
+                ? processDocxWithImages(doc, filename, batchId)
+                : processDocxTextOnly(doc, filename, batchId);
         } finally {
-            try {
-                document.close();
-            } catch (IOException e) {
-                log.warn("⚠️ Document close error", e);
-            }
+            try { doc.close(); }
+            catch (IOException e) { log.warn("⚠️ Fermeture document : {}", e.getMessage()); }
         }
     }
-    
-    private boolean hasImagesInDocument(XWPFDocument document) {
+
+    private boolean hasImagesInDocument(XWPFDocument doc) {
         try {
-            for (XWPFParagraph paragraph : document.getParagraphs()) {
-                for (XWPFRun run : paragraph.getRuns()) {
-                    List<XWPFPicture> pictures = run.getEmbeddedPictures();
-                    if (pictures != null && !pictures.isEmpty()) {
-                        return true;
-                    }
+            for (XWPFParagraph p : doc.getParagraphs()) {
+                for (XWPFRun run : p.getRuns()) {
+                    List<XWPFPicture> pics = run.getEmbeddedPictures();
+                    if (pics != null && !pics.isEmpty()) return true;
                 }
             }
-            return false;
-        } catch (Exception e) {
-            return false;
-        }
+        } catch (Exception ignored) {}
+        return false;
     }
-    
-    // ========================================================================
-    // PROCESSING (INCHANGÉ SAUF analyzeAndIndexImageWithRetry)
-    // ========================================================================
-    
-    private IngestionResult processDocxWithImages(XWPFDocument document, String filename, 
-                                                   String batchId) throws Exception {
-        
-        int textEmbeddings = 0;
-        int imageEmbeddings = 0;
-        int totalImages = 0;
-        int duplicates = 0;
-        
+
+    // -------------------------------------------------------------------------
+    // Traitement DOCX texte seulement
+    // -------------------------------------------------------------------------
+
+    private IngestionResult processDocxTextOnly(XWPFDocument doc, String filename, String batchId)
+            throws Exception {
+
         StringBuilder fullText = new StringBuilder();
-        String baseFilename = FileUtils.sanitizeFilename(FileUtils.removeExtension(filename));
-        String batchShort = batchId.substring(0, Math.min(8, batchId.length()));
-        
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "EXTRACTION", 20, 
-                "Text extraction...");
+
+        for (XWPFParagraph p : doc.getParagraphs()) {
+            String text = p.getText();
+            if (text != null && !text.isBlank()) fullText.append(text).append("\n");
         }
-        
-        for (XWPFParagraph paragraph : document.getParagraphs()) {
-            String text = paragraph.getText();
-            if (text != null && !text.isBlank()) {
-                fullText.append(text).append("\n");
-            }
-            
-            for (XWPFRun run : paragraph.getRuns()) {
-                List<XWPFPicture> pictures = run.getEmbeddedPictures();
-                if (pictures != null) {
-                    for (XWPFPicture picture : pictures) {
-                        if (totalImages >= maxImagesPerFile) break;
-                        
-                        try {
-                            XWPFPictureData pictureData = picture.getPictureData();
-                            if (pictureData == null) continue;
-                            
-                            byte[] imageBytes = pictureData.getData();
-                            BufferedImage image = ImageIO.read(
-                                new ByteArrayInputStream(imageBytes)
-                            );
-                            if (image == null) continue;
-                            
-                            totalImages++;
-                            
-                            if (progressNotifier != null) {
-                                progressNotifier.imageProgress(batchId, filename, 
-                                    totalImages, maxImagesPerFile);
-                            }
-                            
-                            String imageName = String.format("%s_batch%s_img%d",
-                                baseFilename, batchShort, totalImages);
-                            
-                            String savedPath = imageSaver.saveImage(image, imageName);
-                            
-                            Map<String, Object> metadata = new HashMap<>();
-                            metadata.put("source", "docx");
-                            metadata.put("filename", filename);
-                            metadata.put("imageNumber", totalImages);
-                            metadata.put("savedPath", savedPath);
-                            metadata.put("batchId", batchId);
-                            
-                            // ✅ Passer batchId à la méthode
-                            String embeddingId = analyzeAndIndexImageWithRetry(
-                                image, imageName, metadata, batchId
-                            );
-                            
-                            tracker.addImageEmbeddingId(batchId, embeddingId);
-                            imageEmbeddings++;
-                            
-                        } catch (Exception e) {
-                            log.warn("⚠️ Image extraction error", e);
-                        }
-                    }
-                }
-            }
-        }
-        
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "CHUNKING", 30, 
-                "Text chunking...");
-        }
-        
-        if (fullText.length() > 0) {
-            var chunkResult = chunkAndIndexText(fullText.toString(), filename, batchId);
-            textEmbeddings = chunkResult.indexed();
-            duplicates = chunkResult.duplicates();
-        }
-        
-        if (duplicates > 0) {
-            log.info("⏭️ [Dedup] {} duplicates skipped, {} new indexed", 
-                duplicates, textEmbeddings);
-        }
-        
-        Map<String, Object> resultMetadata = new HashMap<>();
-        resultMetadata.put("strategy", getName());
-        resultMetadata.put("filename", filename);
-        resultMetadata.put("hasImages", true);
-        
-        return new IngestionResult(textEmbeddings, imageEmbeddings, resultMetadata);
-    }
-    
-    private IngestionResult processDocxTextOnly(XWPFDocument document, String filename, 
-                                                 String batchId) throws Exception {
-        
-        StringBuilder fullText = new StringBuilder();
-        
-        for (XWPFParagraph paragraph : document.getParagraphs()) {
-            String text = paragraph.getText();
-            if (text != null && !text.isBlank()) {
-                fullText.append(text).append("\n");
-            }
-        }
-        
-        for (XWPFTable table : document.getTables()) {
+
+        for (XWPFTable table : doc.getTables()) {
             for (XWPFTableRow row : table.getRows()) {
                 for (XWPFTableCell cell : row.getTableCells()) {
                     String text = cell.getText();
-                    if (text != null && !text.isBlank()) {
-                        fullText.append(text).append(" ");
-                    }
+                    if (text != null && !text.isBlank()) fullText.append(text).append(" ");
                 }
                 fullText.append("\n");
             }
         }
-        
-        if (fullText.length() == 0) {
-            throw new IllegalArgumentException("Empty DOCX: " + filename);
+
+        if (fullText.isEmpty()) {
+            throw new IngestionException("DOCX vide : " + filename);
         }
-        
-        var chunkResult = chunkAndIndexText(fullText.toString(), filename, batchId);
-        int textEmbeddings = chunkResult.indexed();
-        int duplicates = chunkResult.duplicates();
-        
-        if (duplicates > 0) {
-            log.info("⏭️ [Dedup] {} duplicates skipped, {} new indexed", 
-                duplicates, textEmbeddings);
-        }
-        
-        Map<String, Object> resultMetadata = new HashMap<>();
-        resultMetadata.put("strategy", getName());
-        resultMetadata.put("filename", filename);
-        resultMetadata.put("hasImages", false);
-        
-        return new IngestionResult(textEmbeddings, 0, resultMetadata);
+
+        TextChunker.ChunkResult chunks = textChunker.chunk(
+            fullText.toString(), filename, "docx_text", batchId, textStore, progressNotifier
+        );
+
+        return new IngestionResult(chunks.indexed(), 0);
     }
-    
-    // ========================================================================
-    // ✅ MODIFIÉ: analyzeAndIndexImageWithRetry avec tracking batch
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // Traitement DOCX avec images
+    // -------------------------------------------------------------------------
+
+    private IngestionResult processDocxWithImages(XWPFDocument doc, String filename, String batchId)
+            throws Exception {
+
+        int imageEmbeddings = 0;
+        int totalImages     = 0;
+        StringBuilder fullText = new StringBuilder();
+
+        String baseName   = FileUtils.sanitizeFilename(FileUtils.removeExtension(filename));
+        String batchShort = batchId.substring(0, Math.min(8, batchId.length()));
+
+        notify(n -> n.notifyProgress(batchId, filename, "EXTRACTION", 20, "Extraction..."));
+
+        for (XWPFParagraph paragraph : doc.getParagraphs()) {
+
+            String text = paragraph.getText();
+            if (text != null && !text.isBlank()) fullText.append(text).append("\n");
+
+            for (XWPFRun run : paragraph.getRuns()) {
+                List<XWPFPicture> pictures = run.getEmbeddedPictures();
+                if (pictures == null) continue;
+
+                for (XWPFPicture picture : pictures) {
+                    if (totalImages >= maxImagesPerFile) break;
+
+                    try {
+                        XWPFPictureData data = picture.getPictureData();
+                        if (data == null) continue;
+
+                        BufferedImage image = ImageIO.read(new ByteArrayInputStream(data.getData()));
+                        if (image == null) continue;
+
+                        totalImages++;
+                        final int imgNum = totalImages;
+                        notify(n -> n.imageProgress(batchId, filename, imgNum, maxImagesPerFile));
+
+                        String imageName = String.format("%s_batch%s_img%d",
+                            baseName, batchShort, totalImages);
+                        String savedPath = imageSaver.saveImage(image, imageName);
+
+                        Map<String, Object> meta = buildImageMeta(
+                            filename, totalImages, savedPath, batchId
+                        );
+
+                        String embeddingId = analyzeAndIndex(image, imageName, meta, batchId);
+                        if (embeddingId != null) imageEmbeddings++;
+
+                    } catch (Exception e) {
+                        log.warn("⚠️ Extraction image DOCX : {}", e.getMessage());
+                    }
+                }
+            }
+        }
+
+        notify(n -> n.notifyProgress(batchId, filename, "CHUNKING", 30, "Découpage..."));
+
+        TextChunker.ChunkResult chunks = fullText.isEmpty()
+            ? new TextChunker.ChunkResult(0, 0)
+            : textChunker.chunk(
+                fullText.toString(), filename, "docx_text", batchId, textStore, progressNotifier
+              );
+
+        return new IngestionResult(chunks.indexed(), imageEmbeddings);
+    }
+
+    // -------------------------------------------------------------------------
+    // Vision AI + indexation image — délégue à EmbeddingIndexer
+    // -------------------------------------------------------------------------
+
     @Retryable(
-        value = {IOException.class, TimeoutException.class},
+        value       = {IOException.class, TimeoutException.class},
         maxAttempts = 3,
-        backoff = @Backoff(delay = 1000, multiplier = 2)
+        backoff     = @Backoff(delay = 1000, multiplier = 2)
     )
-    private String analyzeAndIndexImageWithRetry(
-            BufferedImage image, 
-            String imageName,
-            Map<String, Object> additionalMetadata,
-            String batchId) throws IOException {  // ✅ Ajouter batchId
-        
-        long start = System.currentTimeMillis();
-        
+    private String analyzeAndIndex(BufferedImage image, String imageName,
+                                    Map<String, Object> meta, String batchId)
+            throws IOException {
+
         try {
+            long   start       = System.currentTimeMillis();
             String description = visionAnalyzer.analyzeImage(image);
-            
-            Map<String, Object> metadata = new HashMap<>(
-                sanitizer.sanitize(additionalMetadata)
-            );
-            metadata.put("imageName", imageName);
-            metadata.put("type", "image");
-            metadata.put("width", image.getWidth());
-            metadata.put("height", image.getHeight());
-            
-            TextSegment segment = TextSegment.from(
-                description, Metadata.from(metadata)
-            );
-            
-            // ✅ MODIFIÉ: Utiliser getAndTrack + put avec batchId
-            Embedding embedding = embeddingCache.getAndTrack(description, batchId);
-            
-            if (embedding == null) {
-                // Cache miss - Créer l'embedding
-                embedding = embeddingModel.embed(description).content();
-                
-                // ✅ Stocker avec tracking batch
-                embeddingCache.put(description, embedding, batchId);
-            }
-            
-            long duration = System.currentTimeMillis() - start;
-            
-            // ✅ MÉTRIQUE: API call (Vision API) (INCHANGÉE)
-            ragMetrics.recordApiCall("vision_analyze", duration);
-            
-            return imageStore.add(embedding, segment);
-            
+            ragMetrics.recordApiCall("vision_analyze", System.currentTimeMillis() - start);
+
+            Map<String, Object> enriched = new HashMap<>(sanitizer.sanitize(meta));
+            enriched.put("imageName", imageName);
+            enriched.put("type",      "image");
+            enriched.put("width",     image.getWidth());
+            enriched.put("height",    image.getHeight());
+
+            return embeddingIndexer.indexImageDescription(description, enriched, batchId, imageStore);
+
         } catch (Exception e) {
-            // ✅ MÉTRIQUE: API error (INCHANGÉE)
             ragMetrics.recordApiError("vision_analyze");
-            
-            if (e instanceof IOException || e instanceof TimeoutException) {
-                throw e;
-            }
+            if (e instanceof IOException || e instanceof TimeoutException) throw (IOException) e;
             throw new IOException("Vision API error", e);
         }
     }
-    
-    // ========================================================================
-    // ✅ MODIFIÉ: indexText avec tracking batch
-    // ========================================================================
-    
-    private String indexText(String text, Metadata metadata, String batchId) {
-        
-        // ✅ Vérification déduplication texte (INCHANGÉE)
-        if (!textDeduplicationService.checkAndMark(text, batchId)) {
-            log.debug("⏭️ [Dedup] Duplicate text, skip: {}", 
-                truncate(text, 50));
-            return null;
-        }
-        
-        log.debug("✅ [Dedup] New text, indexing: {}", 
-            truncate(text, 50));
-        
-        long start = System.currentTimeMillis();
-        
-        TextSegment segment = TextSegment.from(text, metadata);
-        
-        // ✅ MODIFIÉ: Utiliser getAndTrack + put avec batchId
-        Embedding embedding = embeddingCache.getAndTrack(text, batchId);
-        
-        if (embedding == null) {
-            // Cache miss - Créer l'embedding
-            long embedStart = System.currentTimeMillis();
-            embedding = embeddingModel.embed(text).content();
-            long embedDuration = System.currentTimeMillis() - embedStart;
-            
-            // ✅ MÉTRIQUE: API call embedding (INCHANGÉE)
-            ragMetrics.recordApiCall("embed_text", embedDuration);
-            
-            // ✅ Stocker avec tracking batch
-            embeddingCache.put(text, embedding, batchId);
-        }
-        
-        String embeddingId = textStore.add(embedding, segment);
-        
-        long duration = System.currentTimeMillis() - start;
-        
-        // ✅ MÉTRIQUE: Vector store operation (INCHANGÉE)
-        ragMetrics.recordVectorStoreOperation("insert", duration, 1);
-        
-        return embeddingId;
+
+    // -------------------------------------------------------------------------
+    // Utilitaires
+    // -------------------------------------------------------------------------
+
+    private Map<String, Object> buildImageMeta(String filename, int imgNum,
+                                                String savedPath, String batchId) {
+        Map<String, Object> m = new HashMap<>();
+        m.put("source",      "docx");
+        m.put("filename",    filename);
+        m.put("imageNumber", imgNum);
+        m.put("savedPath",   savedPath);
+        m.put("batchId",     batchId);
+        return m;
     }
-    
-    // ========================================================================
-    // CHUNKING (INCHANGÉ)
-    // ========================================================================
-    
-    private record ChunkResult(int indexed, int duplicates) {}
-    
-    private ChunkResult chunkAndIndexText(String text, String filename, String batchId) {
-        int chunkSize = 1000;
-        int overlap = 100;
-        int indexed = 0;
-        int duplicates = 0;
-        int chunkIndex = 0;
-        
-        int estimatedChunks = text.length() <= chunkSize ? 1 : 
-            (int) Math.ceil(text.length() / (double)(chunkSize - overlap));
-        
-        if (text.length() <= chunkSize) {
-            Map<String, Object> meta = new HashMap<>();
-            meta.put("source", filename);
-            meta.put("type", "docx_text");
-            meta.put("chunkIndex", 0);
-            meta.put("batchId", batchId);
-            
-            Metadata metadata = Metadata.from(sanitizer.sanitize(meta));
-            
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "EMBEDDING", 50, 
-                    "Creating embedding...");
-            }
-            
-            String embeddingId = indexText(text.trim(), metadata, batchId);
-            
-            if (embeddingId != null) {
-                tracker.addTextEmbeddingId(batchId, embeddingId);
-                
-                if (progressNotifier != null) {
-                    progressNotifier.embeddingProgress(batchId, filename, 1, 1);
-                }
-                
-                return new ChunkResult(1, 0);
-            }
-            return new ChunkResult(0, 1);
-        }
-        
-        int start = 0;
-        
-        while (start < text.length()) {
-            int end = Math.min(start + chunkSize, text.length());
-            String chunk = text.substring(start, end).trim();
-            
-            if (chunk.length() > 10) {
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("source", filename);
-                meta.put("type", "docx_text");
-                meta.put("chunkIndex", chunkIndex);
-                meta.put("batchId", batchId);
-                
-                Metadata metadata = Metadata.from(sanitizer.sanitize(meta));
-                
-                String embeddingId = indexText(chunk, metadata, batchId);
-                
-                if (embeddingId != null) {
-                    tracker.addTextEmbeddingId(batchId, embeddingId);
-                    indexed++;
-                    
-                    if (indexed % 10 == 0 || indexed == estimatedChunks) {
-                        if (progressNotifier != null) {
-                            progressNotifier.embeddingProgress(batchId, filename, 
-                                indexed, estimatedChunks);
-                        }
-                    }
-                } else {
-                    duplicates++;
-                }
-                
-                chunkIndex++;
-            }
-            
-            start += Math.max(1, chunkSize - overlap);
-        }
-        
-        if (duplicates > 0) {
-            log.info("✅ [{}] {} chunks indexed ({} duplicates skipped)", 
-                getName(), indexed, duplicates);
-        } else {
-            log.info("✅ [{}] {} chunks indexed", getName(), indexed);
-        }
-        
-        return new ChunkResult(indexed, duplicates);
+
+    @FunctionalInterface
+    private interface NotifierAction {
+        void execute(ProgressNotifier n);
     }
-    
-    // ========================================================================
-    // HELPERS (INCHANGÉS)
-    // ========================================================================
-    
-    private String truncate(String text, int maxLength) {
-        if (text == null || text.length() <= maxLength) {
-            return text;
-        }
-        return text.substring(0, maxLength) + "...";
-    }
-    
-    @Override
-    public String getName() {
-        return "DOCX";
-    }
-    
-    @Override
-    public int getPriority() {
-        return 2;
+
+    private void notify(NotifierAction action) {
+        if (progressNotifier != null) action.execute(progressNotifier);
     }
 }

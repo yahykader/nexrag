@@ -1,29 +1,23 @@
-// ============================================================================
-// STRATEGY - XlsxIngestionStrategy.java (VERSION COMPLÈTE AVEC VISION AI + PROGRESS)
-// Fusion + Déduplication + Vision AI sur PDF + Progress temps réel
-// ============================================================================
 package com.exemple.nexrag.service.rag.ingestion.strategy;
 
 import com.exemple.nexrag.exception.IngestionException;
-import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
-import com.exemple.nexrag.service.rag.ingestion.cache.EmbeddingCache;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.ImageSaver;
 import com.exemple.nexrag.service.rag.ingestion.analyzer.VisionAnalyzer;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.text.TextDeduplicationService;
-import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
-import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
+import com.exemple.nexrag.dto.IngestionResult;
+import com.exemple.nexrag.service.rag.ingestion.progress.ProgressNotifier;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.EmbeddingIndexer;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.IngestionLifecycle;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.LibreOfficeConverter;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.TextChunker;
+import com.exemple.nexrag.service.rag.ingestion.strategy.commun.XlsxProperties;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
 import com.exemple.nexrag.service.rag.ingestion.util.FileUtils;
 import com.exemple.nexrag.service.rag.ingestion.util.InMemoryMultipartFile;
 import com.exemple.nexrag.service.rag.ingestion.util.MetadataSanitizer;
 import com.exemple.nexrag.service.rag.ingestion.util.StreamingFileReader;
+import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
 import com.exemple.nexrag.validation.FileSignatureValidator;
-import com.exemple.nexrag.exception.DuplicateFileException;
-import dev.langchain4j.data.document.Metadata;
-import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
-import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.store.embedding.EmbeddingStore;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.pdfbox.Loader;
@@ -34,7 +28,6 @@ import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
@@ -46,1429 +39,647 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * ✨ STRATÉGIE D'INGESTION XLSX - VERSION COMPLÈTE AVEC PROGRESS
- * 
- * ✅ ROBUSTESSE :
- *    - Détection charts robuste (3 méthodes)
- *    - Détection drawings complète
- *    - resolveDrawing() pour compatibilité POI
- *    - Extraction images via relations + fallback
- *    - Fallback LibreOffice amélioré
- * 
- * ✅ PERFORMANCE :
- *    - Streaming automatique >100MB
- *    - Retry Vision AI (3 tentatives)
- *    - Métriques Prometheus
- *    - EmbeddingCache Redis
- * 
- * ✅ DÉDUPLICATION :
- *    - TextDeduplicationService (évite duplicates PgVector)
- *    - Fix race condition (opération atomique)
- * 
- * ✅ VISION AI SUR PDF :
- *    - Sauvegarde PDF généré
- *    - Conversion PDF → Images
- *    - Analyse Vision AI de chaque page
- *    - Indexation dans imageEmbeddings
- * 
- * ✅ PROGRESS TEMPS RÉEL :
- *    - WebSocket notifications
- *    - Suivi granulaire par étape
- *    - Progress streaming, LibreOffice, Vision AI
- * 
- * @author System
- * @version 5.0.0
+ * Stratégie d'ingestion pour fichiers XLSX.
+ *
+ * Principe SRP  : unique responsabilité → extraire le contenu d'un XLSX.
+ *                 La conversion LibreOffice est dans {@link LibreOfficeConverter}.
+ *                 Le chunking est dans {@link TextChunker}.
+ *                 L'indexation est dans {@link EmbeddingIndexer}.
+ *                 Le cycle de vie est dans {@link IngestionLifecycle}.
+ * Principe DIP  : dépend des abstractions des services partagés.
+ * Clean code    : {@code evaluateFormulas} et {@code detectCharts} conditionnent
+ *                 le comportement via {@link XlsxProperties}.
+ *                 L'extraction cellules est factorisée dans {@code extractSheetText()}.
+ *
+ * @author ayahyaoui
+ * @version 3.0
  */
 @Slf4j
 @Component
 public class XlsxIngestionStrategy implements IngestionStrategy {
-    
-    // ========================================================================
-    // DÉPENDANCES
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // Dépendances spécifiques XLSX
+    // -------------------------------------------------------------------------
     private final EmbeddingStore<TextSegment> textStore;
     private final EmbeddingStore<TextSegment> imageStore;
-    private final EmbeddingModel embeddingModel;
-    private final VisionAnalyzer visionAnalyzer;
-    private final ImageSaver imageSaver;
-    private final IngestionTracker tracker;
-    private final MetadataSanitizer sanitizer;
+    private final VisionAnalyzer              visionAnalyzer;
+    private final ImageSaver                  imageSaver;
+    private final IngestionTracker            tracker;
+    private final MetadataSanitizer           sanitizer;
+    private final FileSignatureValidator      signatureValidator;
+    private final RAGMetrics                  ragMetrics;
+    private final XlsxProperties             props;
+    private final LibreOfficeConverter        libreOfficeConverter;
+
+    // -------------------------------------------------------------------------
+    // Services partagés
+    // -------------------------------------------------------------------------
+    private final EmbeddingIndexer   embeddingIndexer;
+    private final TextChunker        textChunker;
+    private final IngestionLifecycle lifecycle;
+
     private final PdfIngestionStrategy pdfIngestionStrategy;
-    private final RAGMetrics ragMetrics;
-    private final DeduplicationService deduplicationService;
-    private final TextDeduplicationService textDeduplicationService;
-    private final FileSignatureValidator signatureValidator;
-    private final EmbeddingCache embeddingCache;
-    
-    // ✅ AJOUT : ProgressNotifier (injection optionnelle)
+
     @Autowired(required = false)
     private ProgressNotifier progressNotifier;
-    
-    // ========================================================================
-    // CONFIGURATION
-    // ========================================================================
-    
-    @Value("${document.max-images-per-file:100}")
-    private int maxImagesPerFile;
-    
-    @Value("${app.libreoffice.enabled:true}")
-    private boolean libreofficeEnabled;
-    
-    @Value("${app.libreoffice.soffice-path:}")
-    private String sofficePath;
-    
-    @Value("${app.libreoffice.timeoutSeconds:60}")
-    private int libreofficeTimeoutSeconds;
-    
-    @Value("${document.max-pdf-pages-to-analyze:20}")
-    private int maxPdfPagesToAnalyze;
-    
-    @Value("${app.pdf.save-generated:true}")
-    private boolean savePdfGenerated;
-    
-    @Value("${app.pdf.generated-pdf-dir:uploads/generated-pdfs}")
-    private String generatedPdfDir;
-    
-    @Value("${app.pdf.analyze-with-vision:true}")
-    private boolean analyzePdfWithVision;
-    
-    @Value("${app.pdf.render-dpi:300}")
-    private int pdfRenderDpi;
-    
-    // ========================================================================
-    // CONSTRUCTEUR
-    // ========================================================================
-    
+
     public XlsxIngestionStrategy(
-            @Qualifier("textEmbeddingStore") EmbeddingStore<TextSegment> textStore,
+            @Qualifier("textEmbeddingStore")  EmbeddingStore<TextSegment> textStore,
             @Qualifier("imageEmbeddingStore") EmbeddingStore<TextSegment> imageStore,
-            EmbeddingModel embeddingModel,
-            VisionAnalyzer visionAnalyzer,
-            ImageSaver imageSaver,
-            IngestionTracker tracker,
-            MetadataSanitizer sanitizer,
-            PdfIngestionStrategy pdfIngestionStrategy,
-            RAGMetrics ragMetrics,
-            DeduplicationService deduplicationService,
-            TextDeduplicationService textDeduplicationService,
+            VisionAnalyzer         visionAnalyzer,
+            ImageSaver             imageSaver,
+            IngestionTracker       tracker,
+            MetadataSanitizer      sanitizer,
             FileSignatureValidator signatureValidator,
-            EmbeddingCache embeddingCache) {
-        
-        this.textStore = textStore;
-        this.imageStore = imageStore;
-        this.embeddingModel = embeddingModel;
-        this.visionAnalyzer = visionAnalyzer;
-        this.imageSaver = imageSaver;
-        this.tracker = tracker;
-        this.sanitizer = sanitizer;
+            RAGMetrics             ragMetrics,
+            XlsxProperties        props,
+            LibreOfficeConverter   libreOfficeConverter,
+            EmbeddingIndexer       embeddingIndexer,
+            TextChunker            textChunker,
+            IngestionLifecycle     lifecycle,
+            PdfIngestionStrategy   pdfIngestionStrategy) {
+
+        this.textStore            = textStore;
+        this.imageStore           = imageStore;
+        this.visionAnalyzer       = visionAnalyzer;
+        this.imageSaver           = imageSaver;
+        this.tracker              = tracker;
+        this.sanitizer            = sanitizer;
+        this.signatureValidator   = signatureValidator;
+        this.ragMetrics           = ragMetrics;
+        this.props                = props;
+        this.libreOfficeConverter = libreOfficeConverter;
+        this.embeddingIndexer     = embeddingIndexer;
+        this.textChunker          = textChunker;
+        this.lifecycle            = lifecycle;
         this.pdfIngestionStrategy = pdfIngestionStrategy;
-        this.ragMetrics = ragMetrics;
-        this.deduplicationService = deduplicationService;
-        this.textDeduplicationService = textDeduplicationService;
-        this.signatureValidator = signatureValidator;
-        this.embeddingCache = embeddingCache;
-        
-        log.info("✅ [{}] Strategy initialisée (streaming + déduplication + Vision AI + progress)", getName());
+
+        log.info("✅ [{}] Strategy initialisée (detectCharts={}, evaluateFormulas={})",
+            getName(), props.isDetectCharts(), props.isEvaluateFormulas());
     }
-    
+
+    // -------------------------------------------------------------------------
+    // IngestionStrategy API
+    // -------------------------------------------------------------------------
+
     @Override
     public boolean canHandle(MultipartFile file, String extension) {
         return "xlsx".equals(extension);
     }
-    
-    // ========================================================================
-    // MÉTHODE PRINCIPALE
-    // ========================================================================
-    
+
     @Override
-    public IngestionResult ingest(MultipartFile file, String batchId) throws IOException, IngestionException {
-        String filename = file.getOriginalFilename();
-        long fileSize = file.getSize();
-        
-        long startTime = System.currentTimeMillis();
-        
+    public IngestionResult ingest(MultipartFile file, String batchId)
+            throws IOException, IngestionException {
+
+        String filename  = file.getOriginalFilename();
+        long   startTime = System.currentTimeMillis();
+
         try {
-            if (progressNotifier != null) {
-                progressNotifier.uploadStarted(batchId, filename, fileSize);
+            notify(n -> n.uploadStarted(batchId, filename, file.getSize()));
+            log.info("📗 [{}] Traitement XLSX : {} ({} MB)",
+                getName(), filename, file.getSize() / 1_000_000);
+
+            if (file.isEmpty() || file.getSize() == 0) {
+                throw new IOException("Fichier XLSX vide : " + filename);
             }
-            
-            log.info("📗 [{}] Traitement XLSX: {} ({} MB)", 
-                getName(), filename, fileSize / 1_000_000);
-            
-            if (file.isEmpty() || fileSize == 0) {
-                if (progressNotifier != null) {
-                    progressNotifier.error(batchId, filename, "Fichier vide");
-                }
-                throw new IOException("Fichier XLSX vide: " + filename);
-            }
-            
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "VALIDATION", 8, 
-                    "Validation du fichier...");
-            }
-            
+
+            notify(n -> n.notifyProgress(batchId, filename, "VALIDATION", 8, "Validation..."));
             signatureValidator.validate(file, "xlsx");
-            
-            if (progressNotifier != null) {
-                progressNotifier.uploadCompleted(batchId, filename);
-            }
-            
-            if (progressNotifier != null) {
-                progressNotifier.processingStarted(batchId, filename);
-            }
-            
-            IngestionResult result;
-            
-            if (StreamingFileReader.requiresStreaming(file)) {
-                log.info("📖 [{}] STREAMING activé: {} MB", 
-                    getName(), fileSize / 1_000_000);
-                result = ingestWithStreaming(file, batchId);
-            } else {
-                log.debug("📄 [{}] Mode normal: {} MB", 
-                    getName(), fileSize / 1_000_000);
-                result = ingestNormal(file, batchId);
-            }
-            
-            // ✅ Déjà présent + complet
-            textDeduplicationService.clearLocalCache();
-            var dedupStats = textDeduplicationService.getStats(batchId);
-            log.info("📊 [Dedup] Stats - Total indexés: {}, Cache local: {}", 
-                dedupStats.totalIndexed(), dedupStats.localCacheSize());
-            
-            long duration = System.currentTimeMillis() - startTime;
-            int totalEmbeddings = result.textEmbeddings() + result.imageEmbeddings();
-            
-            ragMetrics.recordStrategyProcessing(
-                getName(),
-                duration,
-                totalEmbeddings
-            );
-            
-            if (progressNotifier != null) {
-                progressNotifier.completed(batchId, filename, 
-                    result.textEmbeddings(), result.imageEmbeddings());
-            }
-            
-            log.info("✅ [{}] XLSX traité: {} - text={} images={} durée={}ms mode={}",
-                getName(), filename, result.textEmbeddings(), 
-                result.imageEmbeddings(), duration,
-                StreamingFileReader.requiresStreaming(file) ? "STREAMING" : "NORMAL");
-            
+            notify(n -> n.uploadCompleted(batchId, filename));
+            notify(n -> n.processingStarted(batchId, filename));
+
+            IngestionResult result = StreamingFileReader.requiresStreaming(file)
+                ? ingestWithStreaming(file, batchId)
+                : ingestNormal(file, batchId);
+
+            lifecycle.onSuccess(getName(), batchId, filename, result,
+                System.currentTimeMillis() - startTime, progressNotifier);
+
+            log.info("✅ [{}] XLSX traité : {} — text={} images={}",
+                getName(), filename, result.textEmbeddings(), result.imageEmbeddings());
+
             return result;
-            
+
         } catch (Exception e) {
-            // ✅ AJOUT: Cleanup local cache même en cas d'erreur
-            textDeduplicationService.clearLocalCache();
-            
-            if (progressNotifier != null) {
-                progressNotifier.error(batchId, filename, e.getMessage());
-            }
-            
-            log.error("❌ [{}] Erreur traitement XLSX: {}", getName(), filename, e);
-            throw new IngestionException("Erreur inattendue XLSX : " + e.getMessage(), e);
-            
-        } finally {
-            // Cleanup ressources si nécessaire
+            lifecycle.onError(getName(), batchId, filename, e, progressNotifier);
+            throw new IngestionException("Erreur XLSX : " + e.getMessage(), e);
         }
     }
-    
-    // ========================================================================
-    // INGESTION NORMALE (<100MB)
-    // ========================================================================
-    
+
+    @Override
+    public String getName()     { return "XLSX"; }
+    @Override
+    public int    getPriority() { return 3; }
+
+    // -------------------------------------------------------------------------
+    // Routage streaming / normal
+    // -------------------------------------------------------------------------
+
     private IngestionResult ingestNormal(MultipartFile file, String batchId) throws Exception {
-        
         String filename = file.getOriginalFilename();
-        
-        // ✅ AJOUT : Progress - Processing
-        if (progressNotifier != null) {
-            progressNotifier.processingStarted(batchId, filename);
-        }
-        
-        byte[] bytes = file.getBytes();
-        
+        byte[] bytes    = file.getBytes();
+
         if (bytes.length < 2 || bytes[0] != 'P' || bytes[1] != 'K') {
-            throw new IOException("Fichier XLSX invalide (pas ZIP OOXML): " + filename);
+            throw new IOException("Fichier XLSX invalide (pas ZIP OOXML) : " + filename);
         }
-        
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
-            return processWorkbook(workbook, file, filename, batchId, bytes);
+
+        try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(bytes))) {
+            return processWorkbook(wb, filename, batchId, bytes);
         }
     }
-    
-    // ========================================================================
-    // INGESTION STREAMING (>100MB)
-    // ========================================================================
-    
-    private IngestionResult ingestWithStreaming(MultipartFile file, String batchId) 
+
+    private IngestionResult ingestWithStreaming(MultipartFile file, String batchId)
             throws Exception {
-        
+
         String filename = file.getOriginalFilename();
-        Path tempFile = null;
-        
+        Path   tempFile = null;
+
         try {
-            // ✅ AJOUT : Progress - Streaming
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "STREAMING", 15, 
-                    "Chargement XLSX en streaming...");
-            }
-            
-            log.debug("💾 [{}] Création fichier temporaire...", getName());
+            notify(n -> n.notifyProgress(batchId, filename, "STREAMING", 15,
+                "Chargement XLSX en streaming..."));
+
             tempFile = StreamingFileReader.saveToTempFileWithProgress(file, bytesWritten -> {
-                if (bytesWritten % (50 * 1024 * 1024) == 0) {
-                    log.info("📊 [{}] Sauvegarde: {} MB", 
-                        getName(), bytesWritten / 1_000_000);
-                    
-                    // ✅ AJOUT : Progress streaming détaillé
-                    if (progressNotifier != null) {
-                        int percentage = 15 + (int)((bytesWritten / (double)file.getSize()) * 10);
-                        progressNotifier.notifyProgress(batchId, filename, "STREAMING", percentage, 
-                            String.format("Chargement: %d MB", bytesWritten / 1_000_000));
-                    }
+                if (bytesWritten % (50 * 1024 * 1024) == 0 && progressNotifier != null) {
+                    int pct = 15 + (int)((bytesWritten / (double)file.getSize()) * 10);
+                    progressNotifier.notifyProgress(batchId, filename, "STREAMING", pct,
+                        String.format("Chargement : %d MB", bytesWritten / 1_000_000));
                 }
             });
-            
-            log.info("✅ [{}] Fichier temporaire créé: {}", getName(), tempFile);
-            
-            // ✅ AJOUT : Progress - Processing
-            if (progressNotifier != null) {
-                progressNotifier.processingStarted(batchId, filename);
-            }
-            
+
+            notify(n -> n.processingStarted(batchId, filename));
             byte[] bytes = Files.readAllBytes(tempFile);
-            
+
             try (FileInputStream fis = new FileInputStream(tempFile.toFile());
-                 XSSFWorkbook workbook = new XSSFWorkbook(fis)) {
-                
-                return processWorkbook(workbook, file, filename, batchId, bytes);
+                 XSSFWorkbook wb     = new XSSFWorkbook(fis)) {
+                return processWorkbook(wb, filename, batchId, bytes);
             }
-            
+
         } finally {
             if (tempFile != null) {
-                try {
-                    Files.deleteIfExists(tempFile);
-                    log.debug("🗑️ [{}] Fichier temporaire supprimé", getName());
-                } catch (IOException e) {
-                    log.warn("⚠️ [{}] Impossible de supprimer temp: {}", 
-                        getName(), e.getMessage());
-                }
+                try { Files.deleteIfExists(tempFile); }
+                catch (IOException e) { log.warn("⚠️ Impossible de supprimer le temp : {}", e.getMessage()); }
             }
         }
     }
-    
-    // ========================================================================
-    // TRAITEMENT WORKBOOK
-    // ========================================================================
-    
-    private IngestionResult processWorkbook(
-            XSSFWorkbook workbook, 
-            MultipartFile file,
-            String filename, 
-            String batchId,
-            byte[] xlsxBytes) throws Exception {
-        
-        // ✅ AJOUT : Progress - Analysis
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "ANALYSIS", 25, 
-                "Analyse du contenu XLSX...");
+
+    // -------------------------------------------------------------------------
+    // Analyse du workbook et routage
+    // -------------------------------------------------------------------------
+
+    private IngestionResult processWorkbook(XSSFWorkbook wb, String filename,
+                                             String batchId, byte[] xlsxBytes) throws Exception {
+
+        notify(n -> n.notifyProgress(batchId, filename, "ANALYSIS", 25,
+            "Analyse du contenu XLSX..."));
+
+        boolean hasImages          = hasImagesInXlsx(wb);
+        boolean requiresLibreOffice = false;
+
+        // ✅ detectCharts conditionne la détection — court-circuité si false
+        if (props.isDetectCharts()) {
+            int     chartCount  = countChartsRobust(wb);
+            boolean hasDrawings = hasAnyDrawingInXlsx(wb);
+            requiresLibreOffice = (chartCount > 0 || hasDrawings) && !hasImages;
+
+            log.info("🔍 [{}] XLSX : sheets={} charts={} images={} drawings={}",
+                getName(), wb.getNumberOfSheets(), chartCount, hasImages, hasDrawings);
+        } else {
+            log.info("🔍 [{}] XLSX : sheets={} images={} (detectCharts=false)",
+                getName(), wb.getNumberOfSheets(), hasImages);
         }
-        
-        int sheetCount = workbook.getNumberOfSheets();
-        int chartCount = countChartsRobust(workbook);
-        boolean hasImages = hasImagesInXlsx(workbook);
-        boolean hasDrawings = hasAnyDrawingInXlsx(workbook);
-        
-        log.info("🔍 [{}] XLSX analysé: sheets={} charts={} images={} drawings={}",
-            getName(), sheetCount, chartCount, hasImages, hasDrawings);
-        
-        log.info("🖼️ [{}] getAllPictures()={}", getName(), workbook.getAllPictures().size());
-        
-        IngestionResult result;
-        
-        if (chartCount > 0 && !hasImages) {
-            log.info("📊 [{}] Charts détectés, pas d'images → Conversion PDF", getName());
-            result = processWithLibreOfficeFallback(xlsxBytes, filename, batchId);
+
+        if (requiresLibreOffice) {
+            log.info("📊 [{}] Charts/Drawings détectés → Conversion PDF", getName());
+            return processWithLibreOfficeFallback(xlsxBytes, filename, batchId);
         }
-        else if (hasDrawings && !hasImages && chartCount == 0) {
-            log.info("🎨 [{}] Drawings détectés, pas d'images → Conversion PDF", getName());
-            result = processWithLibreOfficeFallback(xlsxBytes, filename, batchId);
-        }
-        else if (hasImages) {
-            log.info("🖼️ [{}] Images détectées → Extraction XLSX", getName());
-            result = processXlsxWithImages(workbook, filename, batchId);
-        }
-        else {
-            log.info("📝 [{}] Texte uniquement → Extraction XLSX", getName());
-            result = processXlsxTextOnly(workbook, filename, batchId);
-        }
-        
-        return result;
+
+        return hasImages
+            ? processXlsxWithImages(wb, filename, batchId)
+            : processXlsxTextOnly(wb, filename, batchId);
     }
-    
-    // ========================================================================
-    // DÉTECTION CHARTS ROBUSTE
-    // ========================================================================
-    
-    private int countChartsRobust(XSSFWorkbook workbook) {
-        int charts = 0;
-        
-        try {
-            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
-                Sheet sheet = workbook.getSheetAt(i);
-                
-                if (sheet instanceof XSSFChartSheet) {
-                    charts++;
-                    continue;
-                }
-                
-                if (!(sheet instanceof XSSFSheet xssfSheet)) continue;
-                
-                XSSFDrawing drawing = resolveDrawing(xssfSheet);
-                if (drawing == null) continue;
-                
-                try {
-                    List<XSSFChart> embeddedCharts = drawing.getCharts();
-                    if (embeddedCharts != null) {
-                        charts += embeddedCharts.size();
-                        continue;
-                    }
-                } catch (NoSuchMethodError | Exception ignored) {
-                }
-                
-                for (POIXMLDocumentPart rel : drawing.getRelations()) {
-                    if (rel instanceof XSSFChart) {
-                        charts++;
-                    }
-                }
-            }
-            
-        } catch (Exception e) {
-            log.warn("⚠️ [{}] Erreur comptage charts: {}", getName(), e.getMessage());
-        }
-        
-        return charts;
-    }
-    
-    private boolean hasImagesInXlsx(XSSFWorkbook workbook) {
-        try {
-            if (!workbook.getAllPictures().isEmpty()) {
-                return true;
-            }
-            
-            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
-                Sheet sheet = workbook.getSheetAt(i);
-                if (!(sheet instanceof XSSFSheet xssfSheet)) continue;
-                
-                XSSFDrawing drawing = resolveDrawing(xssfSheet);
-                if (drawing == null) continue;
-                
-                for (XSSFShape shape : drawing.getShapes()) {
-                    if (shape instanceof XSSFPicture) {
-                        return true;
-                    }
-                }
-            }
-            
-        } catch (Exception e) {
-            log.warn("⚠️ [{}] Erreur détection images: {}", getName(), e.getMessage());
-        }
-        
-        return false;
-    }
-    
-    private boolean hasAnyDrawingInXlsx(XSSFWorkbook workbook) {
-        try {
-            for (int i = 0; i < workbook.getNumberOfSheets(); i++) {
-                Sheet sheet = workbook.getSheetAt(i);
-                
-                if (sheet instanceof XSSFChartSheet) {
-                    return true;
-                }
-                
-                if (!(sheet instanceof XSSFSheet xssfSheet)) continue;
-                
-                XSSFDrawing drawing = resolveDrawing(xssfSheet);
-                if (drawing == null) continue;
-                
-                try {
-                    if (!drawing.getCharts().isEmpty()) {
-                        return true;
-                    }
-                } catch (NoSuchMethodError | Exception ignored) {
-                }
-            }
-            
-        } catch (Exception e) {
-            log.warn("⚠️ [{}] Erreur détection drawings: {}", getName(), e.getMessage());
-        }
-        
-        return false;
-    }
-    
-    private XSSFDrawing resolveDrawing(XSSFSheet sheet) {
-        XSSFDrawing drawing = sheet.getDrawingPatriarch();
-        if (drawing != null) {
-            return drawing;
-        }
-        
-        for (POIXMLDocumentPart rel : sheet.getRelations()) {
-            if (rel instanceof XSSFDrawing xssfDrawing) {
-                return xssfDrawing;
+
+    // -------------------------------------------------------------------------
+    // Voie LibreOffice : XLSX → PDF → Texte + Vision AI
+    // -------------------------------------------------------------------------
+
+    private IngestionResult processWithLibreOfficeFallback(byte[] xlsxBytes,
+                                                            String filename,
+                                                            String batchId) throws Exception {
+
+        if (!libreOfficeConverter.isEnabled()) {
+            log.warn("⚠️ [{}] LibreOffice désactivé → texte uniquement", getName());
+            try (XSSFWorkbook wb = new XSSFWorkbook(new ByteArrayInputStream(xlsxBytes))) {
+                return processXlsxTextOnly(wb, filename, batchId);
             }
         }
-        
-        return null;
-    }
-    
-    // ========================================================================
-    // ✨ FALLBACK LIBREOFFICE AVEC VISION AI
-    // ========================================================================
-    
-    private IngestionResult processWithLibreOfficeFallback(
-            byte[] xlsxBytes,
-            String filename,
-            String batchId) throws Exception {
-        
-        if (!libreofficeEnabled) {
-            log.warn("⚠️ [{}] LibreOffice désactivé, texte uniquement", getName());
-            
-            try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(xlsxBytes))) {
-                return processXlsxTextOnly(workbook, filename, batchId);
-            }
-        }
-        
+
         log.info("🔄 [{}] Conversion XLSX → PDF via LibreOffice", getName());
-        
-        // ✅ AJOUT : Progress - LibreOffice conversion
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "LIBREOFFICE", 30, 
-                "Conversion en PDF via LibreOffice...");
+        notify(n -> n.notifyProgress(batchId, filename, "LIBREOFFICE", 30, "Conversion en PDF..."));
+
+        String baseName = FileUtils.sanitizeFilename(FileUtils.removeExtension(filename));
+        byte[] pdfBytes = libreOfficeConverter.convert(xlsxBytes, baseName);
+
+        notify(n -> n.notifyProgress(batchId, filename, "PDF_GENERATED", 50, "PDF généré, analyse..."));
+
+        String savedPdfPath     = savePdfToDisk(pdfBytes, baseName, batchId);
+        int    visionEmbeddings = 0;
+
+        if (props.getPdf().isAnalyzeWithVision()) {
+            visionEmbeddings = analyzePdfWithVision(pdfBytes, baseName, batchId, savedPdfPath, filename);
         }
-        
-        String sofficeBinary = resolveSofficeExecutable();
-        String baseFilename = FileUtils.sanitizeFilename(FileUtils.removeExtension(filename));
-        Path tempDir = Files.createTempDirectory("xlsx2pdf_");
-        Path inputXlsx = tempDir.resolve(baseFilename + ".xlsx");
-        Path outDir = tempDir.resolve("out");
-        Files.createDirectories(outDir);
-        
-        try {
-            // ========== ÉTAPE 1 : CONVERSION XLSX → PDF ==========
-            
-            Files.write(inputXlsx, xlsxBytes, 
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            
-            List<String> cmd = List.of(
-                sofficeBinary,
-                "--headless",
-                "--nologo",
-                "--nofirststartwizard",
-                "--norestore",
-                "--convert-to", "pdf",
-                "--outdir", outDir.toAbsolutePath().toString(),
-                inputXlsx.toAbsolutePath().toString()
-            );
 
-            // ✅ AJOUTER après lancement processus LibreOffice:
-            long libreofficeStart = System.currentTimeMillis();
-            
-            Process process;
-            try {
-                process = new ProcessBuilder(cmd)
-                        .redirectErrorStream(true)
-                        .start();
-            } catch (IOException e) {
-                throw new IOException(
-                    "LibreOffice introuvable. Installez LibreOffice ou configurez " +
-                    "app.libreoffice.sofficePath. Commande=" + sofficeBinary, e);
-            }
-            
-            String output = readAll(process.getInputStream());
-            boolean finished = process.waitFor(libreofficeTimeoutSeconds, TimeUnit.SECONDS);
-
-            long librefficeDuration = System.currentTimeMillis() - libreofficeStart;
-    
-            // ✅ MÉTRIQUE: LibreOffice conversion
-            ragMetrics.recordApiCall("libreoffice_convert", librefficeDuration);
-            
-            if (!finished) {
-                process.destroyForcibly();
-
-                // ✅ MÉTRIQUE: LibreOffice error
-                ragMetrics.recordApiError("libreoffice_convert");
-
-                throw new IOException(
-                    "Timeout conversion LibreOffice (" + libreofficeTimeoutSeconds + "s). " +
-                    "Output=" + output);
-            }
-            
-            int exitCode = process.exitValue();
-            if (exitCode != 0) {
-
-                // ✅ MÉTRIQUE: LibreOffice error  
-                ragMetrics.recordApiError("libreoffice_convert");
-                throw new IOException(
-                    "Échec conversion LibreOffice (exit=" + exitCode + "). Output=" + output);
-            }
-            
-            Path pdfPath = outDir.resolve(baseFilename + ".pdf");
-            if (!Files.exists(pdfPath)) {
-                try (var stream = Files.list(outDir)) {
-                    Optional<Path> anyPdf = stream
-                        .filter(p -> p.toString().toLowerCase().endsWith(".pdf"))
-                        .findFirst();
-                    
-                    if (anyPdf.isPresent()) {
-                        pdfPath = anyPdf.get();
-                    } else {
-                        throw new IOException("PDF non généré par LibreOffice. Output=" + output);
-                    }
-                }
-            }
-            
-            log.info("✅ [{}] PDF généré: {} ({} KB)", 
-                getName(), pdfPath.getFileName(), Files.size(pdfPath) / 1024);
-            
-            // ✅ AJOUT : Progress - PDF generated
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "PDF_GENERATED", 50, 
-                    "PDF généré, analyse en cours...");
-            }
-            
-            byte[] pdfBytes = Files.readAllBytes(pdfPath);
-            
-            // ========== ÉTAPE 2 : SAUVEGARDER PDF ==========
-            
-            String savedPdfPath = savePdfToDisk(pdfBytes, baseFilename, batchId);
-            if (savedPdfPath != null) {
-                log.info("💾 [{}] PDF sauvegardé: {}", getName(), savedPdfPath);
-            }
-            
-            // ========== ÉTAPE 3 : VISION AI SUR PDF ==========
-            
-            int visionImageEmbeddings = 0;
-            
-            if (analyzePdfWithVision && visionAnalyzer != null) {
-                log.info("🎨 [{}] Conversion PDF → Images pour Vision AI", getName());
-                
-                visionImageEmbeddings = convertPdfToImagesAndAnalyze(
-                    pdfBytes, 
-                    baseFilename, 
-                    batchId, 
-                    savedPdfPath
-                );
-                
-                log.info("✅ [{}] {} pages analysées avec Vision AI", 
-                    getName(), visionImageEmbeddings);
-            }
-            
-            // ========== ÉTAPE 4 : INGESTION TEXTE PDF ==========
-            
-            MultipartFile pdfFile = new InMemoryMultipartFile(
-                "file",
-                baseFilename + ".pdf",
-                "application/pdf",
-                pdfBytes
-            );
-            
-            log.info("📕 [{}] Traitement PDF généré (texte)", getName());
-            IngestionResult pdfResult = pdfIngestionStrategy.ingest(pdfFile, batchId);
-            
-            // ========== ÉTAPE 5 : COMBINER RÉSULTATS ==========
-            
-            Map<String, Object> resultMetadata = new HashMap<>(pdfResult.metadata());
-            resultMetadata.put("originalFormat", "xlsx");
-            resultMetadata.put("conversionMethod", "libreoffice");
-            resultMetadata.put("xlsxFilename", filename);
-            resultMetadata.put("pdfSavedPath", savedPdfPath);
-            resultMetadata.put("pdfPagesAnalyzed", visionImageEmbeddings);
-            
-            return new IngestionResult(
-                pdfResult.textEmbeddings(),
-                pdfResult.imageEmbeddings() + visionImageEmbeddings,
-                resultMetadata
-            );
-            
-        } finally {
-            try {
-                Files.deleteIfExists(inputXlsx);
-                if (Files.exists(outDir)) {
-                    try (var stream = Files.list(outDir)) {
-                        stream.forEach(p -> {
-                            try {
-                                Files.deleteIfExists(p);
-                            } catch (IOException ignored) {}
-                        });
-                    }
-                    Files.deleteIfExists(outDir);
-                }
-                Files.deleteIfExists(tempDir);
-            } catch (Exception e) {
-                log.warn("⚠️ [{}] Erreur cleanup: {}", getName(), e.getMessage());
-            }
-        }
-    }
-    
-    // ========================================================================
-    // ✨ SAUVEGARDER PDF SUR DISQUE
-    // ========================================================================
-    
-    private String savePdfToDisk(byte[] pdfBytes, String baseFilename, String batchId) 
-            throws IOException {
-        
-        if (!savePdfGenerated) {
-            log.debug("⏭️ [{}] Sauvegarde PDF désactivée", getName());
-            return null;
-        }
-        
-        Path pdfDir = Paths.get(generatedPdfDir);
-        Files.createDirectories(pdfDir);
-        
-        String timestamp = java.time.LocalDateTime.now()
-            .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        
-        String pdfFilename = String.format("%s_batch%s_%s.pdf",
-            baseFilename,
-            batchId.substring(0, Math.min(8, batchId.length())),
-            timestamp
+        IngestionResult pdfResult = pdfIngestionStrategy.ingestSilent(
+            new InMemoryMultipartFile("file", baseName + ".pdf", "application/pdf", pdfBytes),
+            batchId
         );
-        
-        Path pdfPath = pdfDir.resolve(pdfFilename);
-        Files.write(pdfPath, pdfBytes);
-        
-        log.debug("💾 [{}] PDF sauvegardé: {} ({} KB)", 
-            getName(), pdfPath.getFileName(), pdfBytes.length / 1024);
-        
-        return pdfPath.toAbsolutePath().toString();
+
+        return new IngestionResult(
+            pdfResult.textEmbeddings(),
+            pdfResult.imageEmbeddings() + visionEmbeddings,
+            Map.of(
+                "originalFormat",   "xlsx",
+                "conversionMethod", "libreoffice",
+                "xlsxFilename",     filename,
+                "pdfSavedPath",     String.valueOf(savedPdfPath),
+                "pdfPagesAnalyzed", visionEmbeddings
+            )
+        );
     }
-    
-    // ========================================================================
-    // ✨ CONVERTIR PDF EN IMAGES + VISION AI
-    // ========================================================================
-    
-    private int convertPdfToImagesAndAnalyze(
-            byte[] pdfBytes,
-            String baseFilename,
-            String batchId,
-            String pdfSavedPath) throws Exception {
-        
-        if (!analyzePdfWithVision) {
-            log.debug("⏭️ [{}] Analyse Vision AI désactivée", getName());
-            return 0;
-        }
-        
-        int pagesAnalyzed = 0;
+
+    // -------------------------------------------------------------------------
+    // Vision AI sur pages PDF générées
+    // -------------------------------------------------------------------------
+
+    private int analyzePdfWithVision(byte[] pdfBytes, String baseName, String batchId,
+                                      String savedPdfPath, String filename) throws Exception {
+
+        int    analyzed   = 0;
         String batchShort = batchId.substring(0, Math.min(8, batchId.length()));
-        
-        Path tempPdf = Files.createTempFile("xlsx_pdf_", ".pdf");
-        
+        Path   tempPdf    = Files.createTempFile("xlsx_pdf_", ".pdf");
+
         try {
             Files.write(tempPdf, pdfBytes);
-            
-            try (PDDocument document = Loader.loadPDF(tempPdf.toFile())) {
-                
-                PDFRenderer pdfRenderer = new PDFRenderer(document);
-                int totalPages = document.getNumberOfPages();
-                
-                log.info("📄 [{}] PDF contient {} pages", getName(), totalPages);
-                
-                int maxPages = Math.min(totalPages, maxPdfPagesToAnalyze);
-                
-                for (int pageIndex = 0; pageIndex < maxPages; pageIndex++) {
-                    
+
+            try (PDDocument doc = Loader.loadPDF(tempPdf.toFile())) {
+                PDFRenderer renderer = new PDFRenderer(doc);
+                int         total    = doc.getNumberOfPages();
+                // ✅ maxPdfPagesToAnalyze lu depuis props
+                int         maxPages = Math.min(total, props.getMaxPdfPagesToAnalyze());
+
+                log.info("📄 [{}] PDF : {} pages ({} analysées)", getName(), total, maxPages);
+
+                for (int i = 0; i < maxPages; i++) {
                     try {
-                        BufferedImage pageImage = pdfRenderer.renderImageWithDPI(
-                            pageIndex, 
-                            pdfRenderDpi
+                        // ✅ renderDpi lu depuis props.getPdf()
+                        BufferedImage img       = renderer.renderImageWithDPI(i, props.getPdf().getRenderDpi());
+                        String        imgName   = String.format("%s_batch%s_page%d", baseName, batchShort, i + 1);
+                        String        savedPath = imageSaver.saveImage(img, imgName);
+
+                        Map<String, Object> meta = Map.of(
+                            "source",           "xlsx_to_pdf",
+                            "pdfPath",          String.valueOf(savedPdfPath),
+                            "pageNumber",       i + 1,
+                            "totalPages",       total,
+                            "savedPath",        savedPath,
+                            "batchId",          batchId,
+                            "type",             "pdf_page_chart",
+                            "conversionMethod", "libreoffice",
+                            "renderDpi",        props.getPdf().getRenderDpi()
                         );
-                        
-                        log.debug("🎨 [{}] Page {} rendue: {}x{} pixels ({}DPI)", 
-                            getName(), pageIndex + 1, 
-                            pageImage.getWidth(), pageImage.getHeight(),
-                            pdfRenderDpi);
-                        
-                        String imageName = String.format("%s_batch%s_page%d",
-                            baseFilename,
-                            batchShort,
-                            pageIndex + 1
-                        );
-                        
-                        String savedImagePath = imageSaver.saveImage(pageImage, imageName);
-                        
-                        Map<String, Object> metadata = new HashMap<>();
-                        metadata.put("source", "xlsx_to_pdf");
-                        metadata.put("pdfPath", pdfSavedPath);
-                        metadata.put("pageNumber", pageIndex + 1);
-                        metadata.put("totalPages", totalPages);
-                        metadata.put("imageNumber", pageIndex + 1);
-                        metadata.put("savedPath", savedImagePath);
-                        metadata.put("batchId", batchId);
-                        metadata.put("type", "pdf_page_chart");
-                        metadata.put("conversionMethod", "libreoffice");
-                        metadata.put("renderDpi", pdfRenderDpi);
-                        metadata.put("width", pageImage.getWidth());
-                        metadata.put("height", pageImage.getHeight());
-                        
-                        String embeddingId = analyzeAndIndexImageWithRetry(
-                            pageImage,
-                            imageName,
-                            metadata
-                        );
-                        
-                        tracker.addImageEmbeddingId(batchId, embeddingId);
-                        pagesAnalyzed++;
-                        
-                        // ✅ AJOUT : Progress tous les 3 pages
-                        if ((pageIndex + 1) % 3 == 0 || (pageIndex + 1) == maxPages) {
-                            if (progressNotifier != null) {
-                                int percentage = 50 + (int)(((pageIndex + 1) / (double)maxPages) * 30);
-                                progressNotifier.notifyProgress(batchId, baseFilename + ".xlsx", 
-                                    "PDF_VISION", percentage, 
-                                    String.format("Analyse Vision AI: page %d/%d", pageIndex + 1, maxPages));
-                            }
-                            
-                            log.info("📊 [{}] Progress: {}/{} pages analysées", 
-                                getName(), pageIndex + 1, maxPages);
+
+                        String id = analyzeAndIndex(img, imgName, meta, batchId);
+                        if (id != null) { tracker.addImageEmbeddingId(batchId, id); analyzed++; }
+
+                        if ((i + 1) % 3 == 0 || (i + 1) == maxPages) {
+                            final int cur = i + 1, tot = maxPages;
+                            notify(n -> n.notifyProgress(batchId, filename, "PDF_VISION",
+                                50 + (int)((cur / (double)tot) * 30),
+                                String.format("Vision AI : page %d/%d", cur, tot)));
                         }
-                        
+
                     } catch (Exception e) {
-                        log.warn("⚠️ [{}] Erreur analyse page {}: {}", 
-                            getName(), pageIndex + 1, e.getMessage());
+                        log.warn("⚠️ [{}] Erreur analyse page {} : {}", getName(), i + 1, e.getMessage());
                     }
                 }
-                
-                if (totalPages > maxPages) {
-                    log.warn("⚠️ [{}] PDF contient {} pages, limité à {} (config: max-pdf-pages-to-analyze)", 
-                        getName(), totalPages, maxPages);
-                }
             }
-            
-        } catch (Exception e) {
-            log.error("❌ [{}] Erreur conversion PDF→Images: {}", getName(), e.getMessage());
-            throw e;
-            
+
         } finally {
-            try {
-                Files.deleteIfExists(tempPdf);
-            } catch (IOException ignored) {
-            }
+            try { Files.deleteIfExists(tempPdf); } catch (IOException ignored) {}
         }
-        
-        return pagesAnalyzed;
+
+        return analyzed;
     }
-    
-    // ========================================================================
-    // EXTRACTION XLSX AVEC IMAGES
-    // ========================================================================
-    
-    private IngestionResult processXlsxWithImages(
-            XSSFWorkbook workbook,
-            String filename,
-            String batchId) throws Exception {
-        
-        log.info("📗🖼️ [{}] Extraction texte + images XLSX", getName());
-        
-        // ✅ AJOUT : Progress - Extraction
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "EXTRACTION", 30, 
-                "Extraction des données...");
-        }
-        
-        int textEmbeddings = 0;
-        int imageEmbeddings = 0;
-        int totalImagesExtracted = 0;
-        int duplicates = 0;
-        
-        StringBuilder fullText = new StringBuilder();
-        DataFormatter dataFormatter = new DataFormatter();
-        FormulaEvaluator formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
-        
-        String baseFilename = FileUtils.sanitizeFilename(FileUtils.removeExtension(filename));
-        String batchShort = batchId.length() >= 8 ? batchId.substring(0, 8) : batchId;
-        
-        long nonEmptyCells = 0;
-        
-        for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
-            
-            if (totalImagesExtracted >= maxImagesPerFile) {
-                log.warn("⚠️ [{}] Limite images atteinte: {}", getName(), maxImagesPerFile);
-                break;
-            }
-            
-            XSSFSheet sheet = workbook.getSheetAt(sheetIndex);
-            String sheetName = sheet.getSheetName();
-            
-            fullText.append("\n=== Sheet: ").append(sheetName).append(" ===\n");
-            
-            // EXTRACTION TEXTE
-            for (Row row : sheet) {
-                boolean anyInRow = false;
-                
-                for (Cell cell : row) {
-                    try {
-                        String cellValue = dataFormatter.formatCellValue(cell, formulaEvaluator);
-                        
-                        if (cellValue != null) {
-                            cellValue = cellValue.trim();
-                            if (!cellValue.isEmpty()) {
-                                if (anyInRow) fullText.append(" | ");
-                                fullText.append(cellValue);
-                                anyInRow = true;
-                                nonEmptyCells++;
-                            }
-                        }
-                        
-                    } catch (Exception e) {
-                        log.warn("⚠️ [{}] Erreur lecture cellule: {}", 
-                            getName(), e.getMessage());
-                    }
-                }
-                
-                if (anyInRow) fullText.append('\n');
-            }
-            
-            fullText.append('\n');
-            
-            // EXTRACTION IMAGES
+
+    // -------------------------------------------------------------------------
+    // Sauvegarde PDF sur disque
+    // -------------------------------------------------------------------------
+
+    private String savePdfToDisk(byte[] pdfBytes, String baseName, String batchId)
+            throws IOException {
+
+        // ✅ saveGenerated lu depuis props.getPdf()
+        if (!props.getPdf().isSaveGenerated()) return null;
+
+        // ✅ generatedPdfDir lu depuis props.getPdf()
+        Path pdfDir = Paths.get(props.getPdf().getGeneratedPdfDir());
+        Files.createDirectories(pdfDir);
+
+        String ts      = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String pdfName = String.format("%s_batch%s_%s.pdf",
+            baseName, batchId.substring(0, Math.min(8, batchId.length())), ts);
+
+        Path path = pdfDir.resolve(pdfName);
+        Files.write(path, pdfBytes);
+        log.debug("💾 [{}] PDF sauvegardé : {} ({} KB)", getName(), pdfName, pdfBytes.length / 1024);
+        return path.toAbsolutePath().toString();
+    }
+
+    // -------------------------------------------------------------------------
+    // Extraction XLSX texte seulement
+    // -------------------------------------------------------------------------
+
+    private IngestionResult processXlsxTextOnly(XSSFWorkbook wb, String filename,
+                                                  String batchId) throws Exception {
+
+        notify(n -> n.notifyProgress(batchId, filename, "EXTRACTION", 30, "Extraction texte..."));
+
+        // ✅ evaluateFormulas conditionne la création du FormulaEvaluator
+        StringBuilder fullText = extractAllSheetsText(wb, createEvaluator(wb));
+
+        if (fullText.isEmpty()) throw new IngestionException("XLSX vide : " + filename);
+
+        notify(n -> n.notifyProgress(batchId, filename, "CHUNKING", 50, "Découpage..."));
+
+        TextChunker.ChunkResult chunks = textChunker.chunk(
+            fullText.toString(), filename, "xlsx_text", batchId, textStore, progressNotifier
+        );
+
+        return new IngestionResult(chunks.indexed(), 0, Map.of(
+            "strategy", getName(), "filename", filename,
+            "sheets",   wb.getNumberOfSheets(), "hasImages", false
+        ));
+    }
+
+    // -------------------------------------------------------------------------
+    // Extraction XLSX avec images
+    // -------------------------------------------------------------------------
+
+    private IngestionResult processXlsxWithImages(XSSFWorkbook wb, String filename,
+                                                    String batchId) throws Exception {
+
+        notify(n -> n.notifyProgress(batchId, filename, "EXTRACTION", 30, "Extraction..."));
+
+        // ✅ evaluateFormulas conditionne la création du FormulaEvaluator
+        FormulaEvaluator eval         = createEvaluator(wb);
+        DataFormatter    fmt          = new DataFormatter();
+        StringBuilder    fullText     = new StringBuilder();
+        int              imgEmbeddings = 0;
+        int              totalImages   = 0;
+        String           baseName      = FileUtils.sanitizeFilename(FileUtils.removeExtension(filename));
+        String           batchShort    = batchId.substring(0, Math.min(8, batchId.length()));
+
+        for (int si = 0; si < wb.getNumberOfSheets(); si++) {
+
+            // ✅ maxImagesPerFile lu depuis props
+            if (totalImages >= props.getMaxImagesPerFile()) break;
+
+            XSSFSheet sheet     = wb.getSheetAt(si);
+            String    sheetName = sheet.getSheetName();
+
+            // ✅ extraction cellules factorisée — plus de duplication avec extractAllSheetsText
+            fullText.append(extractSheetText(sheet, fmt, eval, sheetName));
+
             XSSFDrawing drawing = resolveDrawing(sheet);
-            if (drawing != null) {
-                int imageIndexInSheet = 0;
-                
-                for (XSSFShape shape : drawing.getShapes()) {
-                    if (totalImagesExtracted >= maxImagesPerFile) break;
-                    
-                    if (shape instanceof XSSFPicture picture) {
-                        try {
-                            XSSFPictureData pictureData = picture.getPictureData();
-                            if (pictureData == null) continue;
-                            
-                            byte[] imageBytes = pictureData.getData();
-                            if (imageBytes == null || imageBytes.length == 0) continue;
-                            
-                            BufferedImage image = ImageIO.read(new ByteArrayInputStream(imageBytes));
-                            if (image == null) continue;
-                            
-                            totalImagesExtracted++;
-                            imageIndexInSheet++;
-                            
-                            // ✅ AJOUT : Progress images tous les 5
-                            if (totalImagesExtracted % 5 == 0 && progressNotifier != null) {
-                                progressNotifier.imageProgress(batchId, filename, 
-                                    totalImagesExtracted, maxImagesPerFile);
-                            }
-                            
-                            String imageName = String.format("%s_batch%s_sheet%d_img%d",
-                                baseFilename, batchShort, sheetIndex + 1, imageIndexInSheet);
-                            
-                            String savedImagePath = imageSaver.saveImage(image, imageName);
-                            
-                            Map<String, Object> metadata = new HashMap<>();
-                            metadata.put("sheetName", sheetName);
-                            metadata.put("sheetIndex", sheetIndex + 1);
-                            metadata.put("imageNumber", totalImagesExtracted);
-                            metadata.put("imageIndexInSheet", imageIndexInSheet);
-                            metadata.put("source", "xlsx");
-                            metadata.put("filename", filename);
-                            metadata.put("savedPath", savedImagePath);
-                            metadata.put("batchId", batchId);
-                            
-                            String embeddingId = analyzeAndIndexImageWithRetry(
-                                image, imageName, metadata
-                            );
-                            
-                            tracker.addImageEmbeddingId(batchId, embeddingId);
-                            imageEmbeddings++;
-                            
-                            if (totalImagesExtracted % 10 == 0) {
-                                log.info("📊 [{}] {} images extraites", 
-                                    getName(), totalImagesExtracted);
-                            }
-                            
-                        } catch (Exception e) {
-                            log.warn("⚠️ [{}] Erreur extraction image sheet {}: {}",
-                                getName(), sheetName, e.getMessage());
-                        }
+            if (drawing == null) continue;
+
+            int imgInSheet = 0;
+            for (XSSFShape shape : drawing.getShapes()) {
+                if (totalImages >= props.getMaxImagesPerFile()) break;
+                if (!(shape instanceof XSSFPicture pic)) continue;
+
+                try {
+                    XSSFPictureData data = pic.getPictureData();
+                    if (data == null) continue;
+
+                    BufferedImage img = ImageIO.read(new ByteArrayInputStream(data.getData()));
+                    if (img == null) continue;
+
+                    totalImages++;
+                    imgInSheet++;
+                    final int imgNum = totalImages;
+                    if (imgNum % 5 == 0) {
+                        notify(n -> n.imageProgress(batchId, filename, imgNum, props.getMaxImagesPerFile()));
                     }
+
+                    String imageName = String.format("%s_batch%s_sheet%d_img%d",
+                        baseName, batchShort, si + 1, imgInSheet);
+                    String savedPath = imageSaver.saveImage(img, imageName);
+
+                    Map<String, Object> meta = new HashMap<>(Map.of(
+                        "sheetName",   sheetName,   "sheetIndex", si + 1,
+                        "imageNumber", totalImages, "source",     "xlsx",
+                        "filename",    filename,    "savedPath",  savedPath,
+                        "batchId",     batchId
+                    ));
+
+                    String id = analyzeAndIndex(img, imageName, meta, batchId);
+                    if (id != null) imgEmbeddings++;
+
+                } catch (Exception e) {
+                    log.warn("⚠️ [{}] Erreur extraction image sheet {} : {}", getName(), sheetName, e.getMessage());
                 }
             }
         }
-        
-        // INDEXER TEXTE
-        // ✅ AJOUT : Progress - Chunking
-        if (fullText.length() > 0 && progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "CHUNKING", 70, 
-                "Découpage du texte...");
-        }
-        
-        if (fullText.length() > 0) {
-            var chunkResult = chunkAndIndexText(fullText.toString(), filename, batchId);
-            textEmbeddings = chunkResult.indexed();
-            duplicates = chunkResult.duplicates();
-        }
-        
-        if (duplicates > 0) {
-            log.info("⏭️ [Dedup] {} duplicates skip, {} nouveaux indexés", 
-                duplicates, textEmbeddings);
-        }
-        
-        log.info("✅ [{}] XLSX traité: {} sheets, {} cellules, {} images",
-            getName(), workbook.getNumberOfSheets(), nonEmptyCells, totalImagesExtracted);
-        
-        Map<String, Object> resultMetadata = new HashMap<>();
-        resultMetadata.put("strategy", getName());
-        resultMetadata.put("filename", filename);
-        resultMetadata.put("hasImages", true);
-        resultMetadata.put("sheets", workbook.getNumberOfSheets());
-        resultMetadata.put("nonEmptyCells", nonEmptyCells);
-        resultMetadata.put("duplicatesSkipped", duplicates);
-        
-        return new IngestionResult(textEmbeddings, imageEmbeddings, resultMetadata);
+
+        notify(n -> n.notifyProgress(batchId, filename, "CHUNKING", 70, "Découpage..."));
+
+        TextChunker.ChunkResult chunks = fullText.isEmpty()
+            ? new TextChunker.ChunkResult(0, 0)
+            : textChunker.chunk(fullText.toString(), filename, "xlsx_text", batchId, textStore, progressNotifier);
+
+        return new IngestionResult(chunks.indexed(), imgEmbeddings, Map.of(
+            "strategy", getName(), "filename", filename,
+            "sheets",   wb.getNumberOfSheets(), "hasImages", true
+        ));
     }
-    
-    // ========================================================================
-    // EXTRACTION XLSX TEXTE SEULEMENT
-    // ========================================================================
-    
-    private IngestionResult processXlsxTextOnly(
-            XSSFWorkbook workbook,
-            String filename,
-            String batchId) throws Exception {
-        
-        log.info("📝 [{}] Extraction texte XLSX", getName());
-        
-        // ✅ AJOUT : Progress - Extraction
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "EXTRACTION", 30, 
-                "Extraction du texte...");
-        }
-        
-        StringBuilder fullText = new StringBuilder();
-        DataFormatter dataFormatter = new DataFormatter();
-        FormulaEvaluator formulaEvaluator = workbook.getCreationHelper().createFormulaEvaluator();
-        
-        long nonEmptyCells = 0;
-        
-        for (int sheetIndex = 0; sheetIndex < workbook.getNumberOfSheets(); sheetIndex++) {
-            Sheet sheet = workbook.getSheetAt(sheetIndex);
-            String sheetName = sheet.getSheetName();
-            
-            fullText.append("\n=== Sheet: ").append(sheetName).append(" ===\n");
-            
-            for (Row row : sheet) {
-                boolean anyInRow = false;
-                
-                for (Cell cell : row) {
-                    try {
-                        String cellValue = dataFormatter.formatCellValue(cell, formulaEvaluator);
-                        
-                        if (cellValue != null) {
-                            cellValue = cellValue.trim();
-                            if (!cellValue.isEmpty()) {
-                                if (anyInRow) fullText.append(" | ");
-                                fullText.append(cellValue);
-                                anyInRow = true;
-                                nonEmptyCells++;
-                            }
-                        }
-                        
-                    } catch (Exception e) {
-                        log.warn("⚠️ [{}] Erreur cellule: {}", getName(), e.getMessage());
-                    }
-                }
-                
-                if (anyInRow) fullText.append('\n');
-            }
-            
-            fullText.append('\n');
-        }
-        
-        if (fullText.length() == 0) {
-            throw new IllegalArgumentException("XLSX vide: " + filename);
-        }
-        
-        // ✅ AJOUT : Progress - Chunking
-        if (progressNotifier != null) {
-            progressNotifier.notifyProgress(batchId, filename, "CHUNKING", 50, 
-                "Découpage du texte...");
-        }
-        
-        var chunkResult = chunkAndIndexText(fullText.toString(), filename, batchId);
-        int textEmbeddings = chunkResult.indexed();
-        int duplicates = chunkResult.duplicates();
-        
-        if (duplicates > 0) {
-            log.info("⏭️ [Dedup] {} duplicates skip, {} nouveaux indexés", 
-                duplicates, textEmbeddings);
-        }
-        
-        log.info("✅ [{}] XLSX texte traité: {} sheets, {} cellules",
-            getName(), workbook.getNumberOfSheets(), nonEmptyCells);
-        
-        Map<String, Object> resultMetadata = new HashMap<>();
-        resultMetadata.put("strategy", getName());
-        resultMetadata.put("filename", filename);
-        resultMetadata.put("hasImages", false);
-        resultMetadata.put("sheets", workbook.getNumberOfSheets());
-        resultMetadata.put("nonEmptyCells", nonEmptyCells);
-        resultMetadata.put("duplicatesSkipped", duplicates);
-        
-        return new IngestionResult(textEmbeddings, 0, resultMetadata);
-    }
-    
-    // ========================================================================
-    // ANALYSE VISION AI AVEC RETRY
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // Vision AI + indexation image
+    // -------------------------------------------------------------------------
+
     @Retryable(
-        value = {IOException.class, TimeoutException.class},
+        value       = {IOException.class, TimeoutException.class},
         maxAttempts = 3,
-        backoff = @Backoff(delay = 1000, multiplier = 2)
+        backoff     = @Backoff(delay = 1000, multiplier = 2)
     )
-    private String analyzeAndIndexImageWithRetry(
-            BufferedImage image,
-            String imageName,
-            Map<String, Object> additionalMetadata) throws IOException {
-        
-        // ✅ Tracking Vision API
-        long visionStart = System.currentTimeMillis();
-        
+    private String analyzeAndIndex(BufferedImage image, String imageName,
+                                    Map<String, Object> meta, String batchId)
+            throws IOException {
+
         try {
+            long   start       = System.currentTimeMillis();
             String description = visionAnalyzer.analyzeImage(image);
-            long visionDuration = System.currentTimeMillis() - visionStart;
-            
-            // ✅ MÉTRIQUE: Vision API call
-            ragMetrics.recordApiCall("vision_analyze", visionDuration);
-            
-            Map<String, Object> metadata = new HashMap<>(sanitizer.sanitize(additionalMetadata));
-            metadata.put("imageName", imageName);
-            metadata.put("type", metadata.getOrDefault("type", "image"));
-            metadata.put("width", image.getWidth());
-            metadata.put("height", image.getHeight());
-            
-            TextSegment segment = TextSegment.from(
-                description,
-                Metadata.from(metadata)
-            );
-            
-            // ✅ MODIFIÉ: Récupérer batchId depuis metadata
-            String batchId = (String) additionalMetadata.get("batchId");
-            
-            // ✅ MODIFIÉ: Utiliser getAndTrack + put avec batchId
-            Embedding embedding = embeddingCache.getAndTrack(description, batchId);
-            
-            if (embedding == null) {
-                // Cache miss - Créer l'embedding
-                long apiStart = System.currentTimeMillis();
-                embedding = embeddingModel.embed(description).content();
-                long apiDuration = System.currentTimeMillis() - apiStart;
-                
-                ragMetrics.recordApiCall("embed_text", apiDuration);
-                
-                // ✅ NOUVEAU: Stocker avec tracking batch
-                embeddingCache.put(description, embedding, batchId);
-            }
-            
-            // ✅ Tracking Vector Store
-            long storeStart = System.currentTimeMillis();
-            String embeddingId = imageStore.add(embedding, segment);
-            long storeDuration = System.currentTimeMillis() - storeStart;
-            
-            // ✅ MÉTRIQUE: Vector store operation
-            ragMetrics.recordVectorStoreOperation("insert", storeDuration, 1);
-            
-            return embeddingId;
-            
+            ragMetrics.recordApiCall("vision_analyze", System.currentTimeMillis() - start);
+
+            Map<String, Object> enriched = new HashMap<>(sanitizer.sanitize(meta));
+            enriched.put("imageName", imageName);
+            enriched.put("type",      enriched.getOrDefault("type", "image"));
+            enriched.put("width",     image.getWidth());
+            enriched.put("height",    image.getHeight());
+
+            return embeddingIndexer.indexImageDescription(description, enriched, batchId, imageStore);
+
         } catch (Exception e) {
-            // ✅ MÉTRIQUE: Vision API error
             ragMetrics.recordApiError("vision_analyze");
-            
-            if (e instanceof IOException || e instanceof TimeoutException) {
-                throw (IOException) e;
-            }
+            if (e instanceof IOException || e instanceof TimeoutException) throw (IOException) e;
             throw new IOException("Vision API error", e);
         }
     }
-    
-    // ========================================================================
-    // CHUNKING AVEC DÉDUPLICATION
-    // ========================================================================
-    
-    private record ChunkResult(int indexed, int duplicates) {}
-    
-    private ChunkResult chunkAndIndexText(String text, String filename, String batchId) {
-        int chunkSize = 1000;
-        int overlap = 100;
-        int indexed = 0;
-        int duplicates = 0;
-        int chunkIndex = 0;
-        
-        // ✅ Estimer nombre de chunks
-        int estimatedChunks = text.length() <= chunkSize ? 1 : 
-            (int) Math.ceil(text.length() / (double)(chunkSize - overlap));
 
-        if (text.length() <= chunkSize) {
-            Map<String, Object> meta = new HashMap<>();
-            meta.put("source", filename);
-            meta.put("type", "xlsx_text");
-            meta.put("chunkIndex", 0);
-            meta.put("batchId", batchId);
-            
-            Metadata metadata = Metadata.from(sanitizer.sanitize(meta));
-            
-            // ✅ AJOUT : Progress embedding
-            if (progressNotifier != null) {
-                progressNotifier.notifyProgress(batchId, filename, "EMBEDDING", 80, 
-                    "Création embedding...");
+    // -------------------------------------------------------------------------
+    // Détection charts / images / drawings
+    // -------------------------------------------------------------------------
+
+    private int countChartsRobust(XSSFWorkbook wb) {
+        int charts = 0;
+        try {
+            for (int i = 0; i < wb.getNumberOfSheets(); i++) {
+                Sheet sheet = wb.getSheetAt(i);
+                if (sheet instanceof XSSFChartSheet) { charts++; continue; }
+                if (!(sheet instanceof XSSFSheet xs)) continue;
+
+                XSSFDrawing drawing = resolveDrawing(xs);
+                if (drawing == null) continue;
+
+                try {
+                    List<XSSFChart> embedded = drawing.getCharts();
+                    if (embedded != null) { charts += embedded.size(); continue; }
+                } catch (NoSuchMethodError | Exception ignored) {}
+
+                charts += (int) drawing.getRelations().stream()
+                    .filter(r -> r instanceof XSSFChart).count();
             }
-            
-            String embeddingId = indexText(text.trim(), metadata, batchId);
-            
-            if (embeddingId != null) {
-                tracker.addTextEmbeddingId(batchId, embeddingId);
-                
-                // ✅ AJOUT : Progress terminé
-                if (progressNotifier != null) {
-                    progressNotifier.embeddingProgress(batchId, filename, 1, 1);
-                }
-                
-                return new ChunkResult(1, 0);
-            }
-            return new ChunkResult(0, 1);
-        }
-
-        int start = 0;
-        while (start < text.length()) {
-            int end = Math.min(start + chunkSize, text.length());
-            String chunk = text.substring(start, end).trim();
-            
-            if (chunk.length() > 10) {
-                Map<String, Object> meta = new HashMap<>();
-                meta.put("source", filename);
-                meta.put("type", "xlsx_text");
-                meta.put("chunkIndex", chunkIndex);
-                meta.put("batchId", batchId);
-                
-                Metadata metadata = Metadata.from(sanitizer.sanitize(meta));
-                String embeddingId = indexText(chunk, metadata, batchId);
-                
-                if (embeddingId != null) {
-                    tracker.addTextEmbeddingId(batchId, embeddingId);
-                    indexed++;
-                    
-                    // ✅ AJOUT : Progress tous les 10 chunks
-                    if (indexed % 10 == 0 || indexed == estimatedChunks) {
-                        if (progressNotifier != null) {
-                            progressNotifier.embeddingProgress(batchId, filename, 
-                                indexed, estimatedChunks);
-                        }
-                    }
-                } else {
-                    duplicates++;
-                }
-                
-                chunkIndex++;
-            }
-            
-            start += Math.max(1, chunkSize - overlap);
-        }
-        
-        log.info("✅ [{}] {} chunks indexés ({} duplicates skip)", 
-            getName(), indexed, duplicates);
-        
-        return new ChunkResult(indexed, duplicates);
-    }
-    
-    private String indexText(String text, Metadata metadata, String batchId) {
-        
-        if (!textDeduplicationService.checkAndMark(text, batchId)) {
-            log.debug("⏭️ [Dedup] Duplicate text, skip: {}", truncate(text, 50));
-            return null;
-        }
-        
-        log.debug("✅ [Dedup] New text, indexing: {}", truncate(text, 50));
-        
-        TextSegment segment = TextSegment.from(text, metadata);
-        
-        // ✅ MODIFIÉ: Utiliser getAndTrack + put avec batchId
-        Embedding embedding = embeddingCache.getAndTrack(text, batchId);
-        
-        if (embedding == null) {
-            // Cache miss - Créer l'embedding
-            long apiStart = System.currentTimeMillis();
-            embedding = embeddingModel.embed(text).content();
-            long apiDuration = System.currentTimeMillis() - apiStart;
-            
-            ragMetrics.recordApiCall("embed_text", apiDuration);
-            
-            // ✅ NOUVEAU: Stocker avec tracking batch
-            embeddingCache.put(text, embedding, batchId);
-        }
-        
-        // ✅ AJOUTER: Tracking vector store
-        long storeStart = System.currentTimeMillis();
-        String embeddingId = textStore.add(embedding, segment);
-        long storeDuration = System.currentTimeMillis() - storeStart;
-        
-        // ✅ MÉTRIQUE: Vector store operation
-        ragMetrics.recordVectorStoreOperation("insert", storeDuration, 1);
-        
-        return embeddingId;
-    }
-    // ========================================================================
-    // UTILITAIRES
-    // ========================================================================
-    
-        /**
-     * Résout automatiquement le chemin de l'exécutable LibreOffice selon l'OS.
-     * 
-     * Ordre de recherche :
-     * 1. Chemin configuré via application.yml (si défini)
-     * 2. Auto-détection selon l'OS
-     * 3. Fallback sur commande système (PATH)
-     * 
-     * @return Chemin absolu vers soffice ou commande système
-     * @throws IllegalStateException si LibreOffice n'est pas trouvé
-     */
-    private String resolveSofficeExecutable() {
-        // 1. ✅ Chemin configuré explicitement
-        if (sofficePath != null && !sofficePath.isBlank()) {
-            Path configuredPath = Paths.get(sofficePath);
-            if (Files.exists(configuredPath)) {
-                log.info("✅ LibreOffice trouvé (configuré) : {}", configuredPath.toAbsolutePath());
-                return configuredPath.toAbsolutePath().toString();
-            }
-            log.warn("⚠️ Chemin configuré introuvable : {}", configuredPath);
-            throw new IllegalStateException(
-                "LibreOffice sofficePath configuré mais introuvable: " + configuredPath
-            );
-        }
-
-        // 2. ✅ Auto-détection selon l'OS
-        String os = System.getProperty("os.name").toLowerCase();
-        log.debug("🔍 Détection LibreOffice sur OS : {}", os);
-        
-        String detectedPath = null;
-        
-        if (os.contains("win")) {
-            detectedPath = detectWindows();
-        } else if (os.contains("nix") || os.contains("nux") || os.contains("aix")) {
-            detectedPath = detectLinux();
-        } else if (os.contains("mac")) {
-            detectedPath = detectMac();
-        }
-        
-        if (detectedPath != null) {
-            log.info("✅ LibreOffice trouvé (auto-détection) : {}", detectedPath);
-            return detectedPath;
-        }
-
-        // 3. ⚠️ Fallback : Essayer la commande système (dans PATH)
-        String fallback = os.contains("win") ? "soffice.exe" : "soffice";
-        log.warn("⚠️ LibreOffice non trouvé, utilisation de la commande système : {}", fallback);
-        log.warn("⚠️ Assurez-vous que LibreOffice est dans le PATH système");
-        
-        return fallback;
-    }
-
-    /**
-     * Détection Windows - Chemins standards LibreOffice
-     */
-    private String detectWindows() {
-        List<String> candidates = List.of(
-                "C:\\Program Files\\LibreOffice\\program\\soffice.exe",
-                "C:\\Program Files (x86)\\LibreOffice\\program\\soffice.exe"
-        );
-        
-        for (String candidate : candidates) {
-            Path path = Paths.get(candidate);
-            if (Files.exists(path)) {
-                log.debug("✅ Trouvé : {}", candidate);
-                return path.toAbsolutePath().toString();
-            }
-        }
-        
-        log.debug("❌ Aucun chemin Windows standard trouvé");
-        return null;
-    }
-
-    /**
-     * Détection Linux - Chemins standards (Docker Alpine/Debian)
-     */
-    private String detectLinux() {
-        List<String> candidates = List.of(
-            "/usr/bin/soffice",              // Alpine / Debian standard
-            "/usr/local/bin/soffice",        // Installation manuelle
-            "/opt/libreoffice/program/soffice",  // Installation custom
-            "/usr/lib/libreoffice/program/soffice"  // Debian alternatif
-        );
-        
-        for (String candidate : candidates) {
-            Path path = Paths.get(candidate);
-            if (Files.exists(path) && Files.isExecutable(path)) {
-                log.debug("✅ Trouvé : {}", candidate);
-                return path.toAbsolutePath().toString();
-            }
-        }
-        
-        log.debug("❌ Aucun chemin Linux standard trouvé");
-        return null;
-    }
-
-    /**
-     * Détection macOS - Chemins standards
-     */
-    private String detectMac() {
-        List<String> candidates = List.of(
-            "/Applications/LibreOffice.app/Contents/MacOS/soffice",
-            "/usr/local/bin/soffice"
-        );
-        
-        for (String candidate : candidates) {
-            Path path = Paths.get(candidate);
-            if (Files.exists(path) && Files.isExecutable(path)) {
-                log.debug("✅ Trouvé : {}", candidate);
-                return path.toAbsolutePath().toString();
-            }
-        }
-        
-        log.debug("❌ Aucun chemin macOS standard trouvé");
-        return null;
-    }
-
-    
-
-    // ========================================================================
-    // UTILITAIRES
-    // ========================================================================
-    private String readAll(InputStream in) {
-        try (in) {
-            return new String(in.readAllBytes());
         } catch (Exception e) {
-            return "";
+            log.warn("⚠️ [{}] Erreur comptage charts : {}", getName(), e.getMessage());
         }
+        return charts;
     }
-    
-    private String truncate(String text, int maxLength) {
-        if (text == null || text.length() <= maxLength) {
-            return text;
+
+    private boolean hasImagesInXlsx(XSSFWorkbook wb) {
+        try {
+            if (!wb.getAllPictures().isEmpty()) return true;
+            for (int i = 0; i < wb.getNumberOfSheets(); i++) {
+                if (!(wb.getSheetAt(i) instanceof XSSFSheet xs)) continue;
+                XSSFDrawing d = resolveDrawing(xs);
+                if (d != null && d.getShapes().stream().anyMatch(s -> s instanceof XSSFPicture)) return true;
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ [{}] Erreur détection images : {}", getName(), e.getMessage());
         }
-        return text.substring(0, maxLength) + "...";
+        return false;
     }
-    
-    @Override
-    public String getName() {
-        return "XLSX";
+
+    private boolean hasAnyDrawingInXlsx(XSSFWorkbook wb) {
+        try {
+            for (int i = 0; i < wb.getNumberOfSheets(); i++) {
+                Sheet sheet = wb.getSheetAt(i);
+                if (sheet instanceof XSSFChartSheet) return true;
+                if (!(sheet instanceof XSSFSheet xs)) continue;
+                XSSFDrawing d = resolveDrawing(xs);
+                try { if (d != null && !d.getCharts().isEmpty()) return true; }
+                catch (NoSuchMethodError | Exception ignored) {}
+            }
+        } catch (Exception e) {
+            log.warn("⚠️ [{}] Erreur détection drawings : {}", getName(), e.getMessage());
+        }
+        return false;
     }
-    
-    @Override
-    public int getPriority() {
-        return 3;
+
+    private XSSFDrawing resolveDrawing(XSSFSheet sheet) {
+        XSSFDrawing d = sheet.getDrawingPatriarch();
+        if (d != null) return d;
+        return sheet.getRelations().stream()
+            .filter(r -> r instanceof XSSFDrawing)
+            .map(r -> (XSSFDrawing) r)
+            .findFirst().orElse(null);
+    }
+
+    // -------------------------------------------------------------------------
+    // Utilitaires extraction texte
+    // -------------------------------------------------------------------------
+
+    /**
+     * Crée un {@link FormulaEvaluator} si {@code document.xlsx.evaluate-formulas=true},
+     * sinon retourne {@code null} — {@link DataFormatter#formatCellValue} accepte null.
+     */
+    private FormulaEvaluator createEvaluator(XSSFWorkbook wb) {
+        if (props.isEvaluateFormulas()) {
+            log.debug("🔢 [{}] FormulaEvaluator activé", getName());
+            return wb.getCreationHelper().createFormulaEvaluator();
+        }
+        log.debug("🔢 [{}] FormulaEvaluator désactivé (evaluate-formulas=false)", getName());
+        return null;
+    }
+
+    /**
+     * Extrait le texte de toutes les feuilles.
+     * Utilisé par {@code processXlsxTextOnly} — élimine la duplication
+     * avec la boucle identique dans {@code processXlsxWithImages}.
+     */
+    private StringBuilder extractAllSheetsText(XSSFWorkbook wb, FormulaEvaluator eval) {
+        StringBuilder sb  = new StringBuilder();
+        DataFormatter fmt = new DataFormatter();
+        for (int si = 0; si < wb.getNumberOfSheets(); si++) {
+            XSSFSheet sheet = wb.getSheetAt(si);
+            sb.append(extractSheetText(sheet, fmt, eval, sheet.getSheetName()));
+        }
+        return sb;
+    }
+
+    /**
+     * Extrait le texte d'une feuille (cellules et en-tête).
+     * Point unique de la logique cellule — supprime la duplication entre
+     * {@code processXlsxTextOnly} et {@code processXlsxWithImages}.
+     */
+    private StringBuilder extractSheetText(Sheet sheet, DataFormatter fmt,
+                                            FormulaEvaluator eval, String sheetName) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("\n=== Sheet: ").append(sheetName).append(" ===\n");
+
+        for (Row row : sheet) {
+            boolean any = false;
+            for (Cell cell : row) {
+                try {
+                    String val = fmt.formatCellValue(cell, eval);
+                    if (val != null && !val.isBlank()) {
+                        if (any) sb.append(" | ");
+                        sb.append(val.trim());
+                        any = true;
+                    }
+                } catch (Exception ignored) {}
+            }
+            if (any) sb.append('\n');
+        }
+
+        sb.append('\n');
+        return sb;
+    }
+
+    // -------------------------------------------------------------------------
+    // Utilitaires
+    // -------------------------------------------------------------------------
+
+    @FunctionalInterface
+    private interface NotifierAction { void execute(ProgressNotifier n); }
+
+    private void notify(NotifierAction action) {
+        if (progressNotifier != null) action.execute(progressNotifier);
     }
 }

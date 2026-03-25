@@ -1,464 +1,360 @@
-// ============================================================================
-// SERVICE - MultimodalIngestionService.java
-// Orchestrateur principal d'ingestion multimodale avec RAGMetrics unifié
-// ============================================================================
 package com.exemple.nexrag.service.rag.ingestion;
 
-import com.exemple.nexrag.service.rag.ingestion.repository.EmbeddingRepository;
-import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
-import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
-import com.exemple.nexrag.dto.ScanResult;
 import com.exemple.nexrag.config.ClamAvProperties;
-import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionResult;
-import com.exemple.nexrag.service.rag.ingestion.security.AntivirusScanner;
-import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionStrategy;
 import com.exemple.nexrag.exception.DuplicateFileException;
 import com.exemple.nexrag.exception.VirusDetectedException;
+import com.exemple.nexrag.service.rag.ingestion.deduplication.file.DeduplicationService;
+import com.exemple.nexrag.dto.*;
+import com.exemple.nexrag.service.rag.ingestion.repository.EmbeddingRepository;
+import com.exemple.nexrag.service.rag.ingestion.security.AntivirusGuard;
+import com.exemple.nexrag.service.rag.ingestion.security.AntivirusScanner;
+import com.exemple.nexrag.service.rag.ingestion.strategy.IngestionStrategy;
 import com.exemple.nexrag.service.rag.ingestion.tracker.IngestionTracker;
+import com.exemple.nexrag.service.rag.metrics.RAGMetrics;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
-import java.nio.file.Files;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Orchestrateur principal d'ingestion multimodale.
+ *
+ * Principe SRP  : orchestre les étapes — antivirus, dédup, sélection stratégie,
+ *                 ingestion, métriques, rollback. Chaque étape délègue à un service dédié.
+ * Principe OCP  : l'ajout d'une nouvelle stratégie ne modifie pas cet orchestrateur.
+ * Principe DIP  : dépend des interfaces {@link IngestionStrategy}, {@link AntivirusGuard},
+ *                 {@link DeduplicationService} — pas de leurs implémentations concrètes.
+ * Clean code    : inner classes extraites dans {@code model/}.
+ *                 {@code AntivirusGuard.assertClean()} remplace le fichier temporaire manuel.
+ *                 {@code IngestionStatus} devient un record immuable.
+ *
+ * @author RAG Team
+ * @version 2.0
+ */
 @Slf4j
 @Service
 public class IngestionOrchestrator {
-    
+
     private final List<IngestionStrategy> strategies;
-    private final RAGMetrics ragMetrics;
-    private final IngestionTracker tracker;
-    private final DeduplicationService deduplicationService;
-    private final AntivirusScanner antivirusScanner;
-    private final EmbeddingRepository embeddingRepository;
-    
-    private final ClamAvProperties antivirusProps;
-    
+    private final RAGMetrics             ragMetrics;
+    private final IngestionTracker       tracker;
+    private final DeduplicationService   deduplicationService;
+    private final AntivirusGuard         antivirusGuard;
+    private final AntivirusScanner       antivirusScanner;
+    private final EmbeddingRepository    embeddingRepository;
+    private final ClamAvProperties       antivirusProps;
+
     private final Map<String, IngestionStatus> activeIngestions = new ConcurrentHashMap<>();
-    
+
     public IngestionOrchestrator(
             List<IngestionStrategy> strategies,
-            RAGMetrics ragMetrics,
-            IngestionTracker tracker,
-            DeduplicationService deduplicationService,
-            AntivirusScanner antivirusScanner,
-            EmbeddingRepository embeddingRepository,
-            ClamAvProperties antivirusProps) {
-        
-        this.strategies = strategies;
-        this.ragMetrics = ragMetrics;
-        this.tracker = tracker;
+            RAGMetrics             ragMetrics,
+            IngestionTracker       tracker,
+            DeduplicationService   deduplicationService,
+            AntivirusGuard         antivirusGuard,
+            AntivirusScanner       antivirusScanner,
+            EmbeddingRepository    embeddingRepository,
+            ClamAvProperties       antivirusProps) {
+
+        this.strategies          = strategies;
+        this.ragMetrics          = ragMetrics;
+        this.tracker             = tracker;
         this.deduplicationService = deduplicationService;
-        this.antivirusScanner = antivirusScanner;
+        this.antivirusGuard      = antivirusGuard;
+        this.antivirusScanner    = antivirusScanner;
         this.embeddingRepository = embeddingRepository;
-        this.antivirusProps = antivirusProps;
-        
-        this.strategies.sort(Comparator.comparingInt(IngestionStrategy::getPriority));
-        
-        log.info("✅ MultimodalIngestionService initialisé");
-        log.info("📋 {} strategies | 🦠 Antivirus: {} | 🔐 Dedup: ACTIVÉE",
+        this.antivirusProps      = antivirusProps;
+
+        // ✅ strategies déjà triées par IngestionConfig — sort() supprimé
+        log.info("✅ IngestionOrchestrator initialisé — {} stratégies | antivirus: {}",
             strategies.size(), antivirusProps.isEnabled() ? "ON" : "OFF");
     }
-    
-    // ========================================================================
-    // API SYNCHRONE (INCHANGÉE)
-    // ========================================================================
-    
-    public IngestionResult ingestFile(MultipartFile file, String batchId) 
-            throws Exception {
+
+    // -------------------------------------------------------------------------
+    // API synchrone
+    // -------------------------------------------------------------------------
+
+    public IngestionResult ingestFile(MultipartFile file, String batchId) throws Exception {
         return ingestFileInternal(file, batchId);
     }
-    
-    // ========================================================================
-    // API ASYNCHRONE - FICHIER UNIQUE (INCHANGÉE)
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // API asynchrone — fichier unique
+    // -------------------------------------------------------------------------
+
     @Async
-    public CompletableFuture<IngestionResult> ingestFileAsync(
-            MultipartFile file,
-            String batchId) {
-        
+    public CompletableFuture<IngestionResult> ingestFileAsync(MultipartFile file, String batchId) {
         try {
-            log.info("📥 [ASYNC] Start: {} (batch: {})",
-                file.getOriginalFilename(), batchId);
-            
+            log.info("📥 [ASYNC] Démarrage : {} (batch: {})", file.getOriginalFilename(), batchId);
             IngestionResult result = ingestFileInternal(file, batchId);
-            
-            log.info("✅ [ASYNC] Done: {} - text={} images={}",
-                file.getOriginalFilename(),
-                result.textEmbeddings(),
-                result.imageEmbeddings());
-            
+            log.info("✅ [ASYNC] Terminé : {} — text={} images={}",
+                file.getOriginalFilename(), result.textEmbeddings(), result.imageEmbeddings());
             return CompletableFuture.completedFuture(result);
-            
         } catch (Exception e) {
-            log.error("❌ [ASYNC] Error: {}", file.getOriginalFilename(), e);
+            log.error("❌ [ASYNC] Erreur : {}", file.getOriginalFilename(), e);
             return CompletableFuture.failedFuture(e);
         }
     }
-    
-    // ========================================================================
-    // API ASYNCHRONE - BATCH (INCHANGÉE)
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // API asynchrone — batch simple
+    // -------------------------------------------------------------------------
+
     @Async
     public CompletableFuture<List<IngestionResult>> ingestBatch(
-            List<MultipartFile> files,
-            String batchId) {
-        
-        log.info("📦 [BATCH] Start: {} files (batchId: {})",
-            files.size(), batchId);
-        
+            List<MultipartFile> files, String batchId) {
+
+        log.info("📦 [BATCH] Démarrage : {} fichiers (batch: {})", files.size(), batchId);
+        long start   = System.currentTimeMillis();
+        List<IngestionResult> results = new ArrayList<>();
+
         try {
-            long startTime = System.currentTimeMillis();
-            List<IngestionResult> results = new ArrayList<>();
-            
             for (MultipartFile file : files) {
                 try {
-                    IngestionResult result = ingestFileInternal(file, batchId);
-                    results.add(result);
-                    
+                    results.add(ingestFileInternal(file, batchId));
                 } catch (Exception e) {
-                    log.error("❌ [BATCH] Error: {}", file.getOriginalFilename(), e);
+                    log.error("❌ [BATCH] Erreur : {}", file.getOriginalFilename(), e);
                 }
             }
-            
-            long duration = System.currentTimeMillis() - startTime;
-            
-            int totalText = results.stream()
-                .mapToInt(IngestionResult::textEmbeddings)
-                .sum();
-            
-            int totalImages = results.stream()
-                .mapToInt(IngestionResult::imageEmbeddings)
-                .sum();
-            
-            log.info("✅ [BATCH] Done: {}/{} success, {}ms, text={}, images={}",
+
+            long duration   = System.currentTimeMillis() - start;
+            int  totalText  = results.stream().mapToInt(IngestionResult::textEmbeddings).sum();
+            int  totalImages = results.stream().mapToInt(IngestionResult::imageEmbeddings).sum();
+
+            log.info("✅ [BATCH] Terminé : {}/{} succès, {}ms, text={} images={}",
                 results.size(), files.size(), duration, totalText, totalImages);
-            
+
             return CompletableFuture.completedFuture(results);
-            
+
         } catch (Exception e) {
-            log.error("❌ [BATCH] Global error", e);
+            log.error("❌ [BATCH] Erreur globale", e);
             return CompletableFuture.failedFuture(e);
         }
     }
-    
+
+    // -------------------------------------------------------------------------
+    // API asynchrone — batch détaillé
+    // -------------------------------------------------------------------------
+
     @Async
     public CompletableFuture<BatchIngestionResult> ingestBatchDetailed(
-            List<MultipartFile> files,
-            String batchId) {
-        
-        log.info("📦 [BATCH-DETAILED] Start: {} files", files.size());
-        
-        long startTime = System.currentTimeMillis();
-        List<FileIngestionResult> fileResults = new ArrayList<>();
-        
-        for (MultipartFile file : files) {
-            FileIngestionResult fileResult = processFileForBatch(file, batchId);
-            fileResults.add(fileResult);
-        }
-        
-        long duration = System.currentTimeMillis() - startTime;
-        
-        int successCount = (int) fileResults.stream()
-            .filter(FileIngestionResult::success)
-            .count();
-        
-        int duplicateCount = (int) fileResults.stream()
-            .filter(FileIngestionResult::duplicate)
-            .count();
-        
-        int errorCount = files.size() - successCount - duplicateCount;
-        
-        int totalText = fileResults.stream()
+            List<MultipartFile> files, String batchId) {
+
+        log.info("📦 [BATCH-DETAILED] Démarrage : {} fichiers", files.size());
+        long start = System.currentTimeMillis();
+
+        List<FileIngestionResult> fileResults = files.stream()
+            .map(f -> processFileForBatch(f, batchId))
+            .toList();
+
+        long duration      = System.currentTimeMillis() - start;
+        int  successCount  = (int) fileResults.stream().filter(FileIngestionResult::success).count();
+        int  duplicateCount = (int) fileResults.stream().filter(FileIngestionResult::duplicate).count();
+        int  totalText     = fileResults.stream()
             .filter(r -> r.success() && r.result() != null)
-            .mapToInt(r -> r.result().textEmbeddings())
-            .sum();
-        
-        int totalImages = fileResults.stream()
+            .mapToInt(r -> r.result().textEmbeddings()).sum();
+        int  totalImages   = fileResults.stream()
             .filter(r -> r.success() && r.result() != null)
-            .mapToInt(r -> r.result().imageEmbeddings())
-            .sum();
-        
-        log.info("✅ [BATCH-DETAILED] Done: {} success, {} duplicates, {} errors, {}ms",
-            successCount, duplicateCount, errorCount, duration);
-        
-        BatchIngestionResult result = new BatchIngestionResult(
-            batchId,
-            fileResults,
-            successCount,
-            errorCount,
-            totalText,
-            totalImages,
-            duration,
-            duplicateCount
-        );
-        
-        return CompletableFuture.completedFuture(result);
+            .mapToInt(r -> r.result().imageEmbeddings()).sum();
+
+        log.info("✅ [BATCH-DETAILED] {} succès, {} doublons, {} erreurs, {}ms",
+            successCount, duplicateCount,
+            files.size() - successCount - duplicateCount, duration);
+
+        return CompletableFuture.completedFuture(new BatchIngestionResult(
+            batchId, fileResults, successCount,
+            files.size() - successCount - duplicateCount,
+            totalText, totalImages, duration, duplicateCount
+        ));
     }
-    
-    // ========================================================================
-    // LOGIQUE INGESTION INTERNE (TOUTES INCHANGÉES)
-    // ========================================================================
-    
-    private IngestionResult ingestFileInternal(
-            MultipartFile file,
-            String batchId) throws Exception {
-        
-        String filename = file.getOriginalFilename();
+
+    // -------------------------------------------------------------------------
+    // Logique d'ingestion interne
+    // -------------------------------------------------------------------------
+
+    private IngestionResult ingestFileInternal(MultipartFile file, String batchId)
+            throws Exception {
+
+        String filename  = file.getOriginalFilename();
         String extension = getExtension(filename);
-        
-        log.info("📄 Ingestion: {} ({}, {} KB, batch: {})",
-            filename, extension.toUpperCase(),
-            file.getSize() / 1024, batchId);
-        
+
+        log.info("📄 Ingestion : {} ({}, {} KB, batch: {})",
+            filename, extension.toUpperCase(), file.getSize() / 1024, batchId);
+
         ragMetrics.startIngestion();
-        
-        IngestionStatus status = new IngestionStatus(batchId, filename);
+
+        IngestionStatus status = IngestionStatus.started(batchId, filename);
         activeIngestions.put(batchId, status);
-        
-        long startTime = System.currentTimeMillis();
+
+        long   startTime    = System.currentTimeMillis();
         String strategyName = "unknown";
-        
+
         try {
-            // 0. SCAN ANTIVIRUS
+            // 0. ANTIVIRUS — délégue à AntivirusGuard (plus de fichier temporaire manuel)
             if (antivirusProps.isEnabled()) {
-                log.debug("🦠 Antivirus scan: {}", filename);
-                
-                byte[] fileBytes = file.getBytes();
-                File tempFile = File.createTempFile("scan-", ".tmp");
-                Files.write(tempFile.toPath(), fileBytes);
-                
-                ScanResult scanResult = antivirusScanner.scanFile(tempFile);
-                tempFile.delete();
-                
-                if (!scanResult.isClean()) {
-                    log.error("🚨 VIRUS DETECTED: {} - {}",
-                        filename, scanResult.getVirusName());
-                    
-                    ragMetrics.recordVirusDetected(scanResult.getVirusName());
-                    
-                    throw new VirusDetectedException(
-                        "Virus detected: " + scanResult.getVirusName()
-                    );
-                }
-                
-                log.debug("✅ File clean");
+                antivirusGuard.assertClean(file);
+                log.debug("✅ Fichier sain : {}", filename);
             }
-            
-            // 1. SÉLECTION STRATEGY
+
+            // 1. SÉLECTION STRATÉGIE
             IngestionStrategy strategy = selectStrategy(file, extension);
-            
             if (strategy == null) {
-                throw new UnsupportedOperationException(
-                    "No strategy for: " + extension
-                );
+                throw new UnsupportedOperationException("Aucune stratégie pour : " + extension);
             }
-            
+
             strategyName = strategy.getName();
-            status.setStrategy(strategyName);
-            
-            log.info("🎯 Strategy: {} (priority: {})",
-                strategyName, strategy.getPriority());
-            
-            // 2. VÉRIFICATION DOUBLON
+            status       = status.withStrategy(strategyName);
+            activeIngestions.put(batchId, status);
+
+            log.info("🎯 Stratégie : {} (priorité: {})", strategyName, strategy.getPriority());
+
+            // 2. DÉDUPLICATION
             byte[] fileBytes = file.getBytes();
-            String fileHash = deduplicationService.computeHash(fileBytes);
+            String fileHash  = deduplicationService.computeHash(fileBytes);
 
             if (deduplicationService.isDuplicateAndRecord(fileHash, strategyName)) {
                 String existingBatchId = deduplicationService.getExistingBatchId(fileHash);
                 ragMetrics.recordDuplicate(strategyName);
-                
-                log.warn("⚠️ Duplicate: {} (existing batch: {})", 
-                    filename, existingBatchId);
-                
-                throw new DuplicateFileException(
-                    "Duplicate file: " + filename, 
-                    existingBatchId
-                );
+                log.warn("⚠️ Doublon détecté : {} (batch existant: {})", filename, existingBatchId);
+                throw new DuplicateFileException("Fichier en doublon : " + filename, existingBatchId);
             }
-            
+
             deduplicationService.markAsIngested(fileHash, batchId);
 
             // 3. INGESTION
             IngestionResult result = strategy.ingest(file, batchId);
-            
-            // 4. SUCCÈS - MÉTRIQUES
-            long duration = System.currentTimeMillis() - startTime;
-            status.complete(true, duration);
-            
-            int totalEmbeddings = result.textEmbeddings() + result.imageEmbeddings();
-            int chunks = Math.max(result.textEmbeddings(), 0);
-            
-            ragMetrics.recordStrategyProcessing(strategyName, duration, chunks);
+
+            // 4. SUCCÈS — métriques
+            long duration       = System.currentTimeMillis() - startTime;
+            int  totalEmbeddings = result.totalEmbeddings();
+
+            ragMetrics.recordStrategyProcessing(strategyName, duration, result.textEmbeddings());
             ragMetrics.recordIngestionSuccess(strategyName, duration, totalEmbeddings);
-            
-            log.info("✅ Success: {} - strategy={}, text={}, images={}, {}ms",
+
+            status = status.completed(true, duration);
+            activeIngestions.put(batchId, status);
+
+            log.info("✅ Succès : {} — strategy={} text={} images={} {}ms",
                 filename, strategyName,
                 result.textEmbeddings(), result.imageEmbeddings(), duration);
-            
+
             return result;
-            
+
         } catch (Exception e) {
-            boolean isDuplicate = e instanceof DuplicateFileException;
-            
-            if (isDuplicate) {
-                DuplicateFileException dupEx = (DuplicateFileException) e;
-                log.warn("⚠️ Duplicate: {} (existing batch: {})", 
-                    filename, dupEx.getExistingBatchId());
+            long duration = System.currentTimeMillis() - startTime;
+            status = status.completed(false, duration);
+            activeIngestions.put(batchId, status);
+
+            if (e instanceof DuplicateFileException dup) {
+                log.warn("⚠️ Doublon : {} (batch existant: {})", filename, dup.getExistingBatchId());
             } else {
-                log.error("❌ Failure: {} - Rolling back...", filename, e);
-                
-                try {
-                    int rolledBack = tracker.rollbackBatch(batchId);
-                    log.info("🔄 Rollback: {} embeddings deleted", rolledBack);
-                } catch (Exception rollbackError) {
-                    log.error("❌ Rollback error: {}", rollbackError.getMessage());
-                }
-                
+                log.error("❌ Échec : {} — rollback en cours...", filename, e);
+                rollbackSafely(batchId);
                 ragMetrics.recordIngestionError(strategyName, e.getClass().getSimpleName());
             }
-            
-            long duration = System.currentTimeMillis() - startTime;
-            status.complete(false, duration);
-            
+
             throw e;
-            
+
         } finally {
             ragMetrics.endIngestion();
-            
-            CompletableFuture.delayedExecutor(60, TimeUnit.SECONDS)
-                .execute(() -> activeIngestions.remove(batchId));
+            scheduleCleanup(batchId);
         }
     }
-    
-    // ========================================================================
-    // PRIVATE HELPERS (TOUTES INCHANGÉES)
-    // ========================================================================
-    
-    private FileIngestionResult processFileForBatch(
-            MultipartFile file,
-            String batchId) {
-        
+
+    // -------------------------------------------------------------------------
+    // Helpers privés
+    // -------------------------------------------------------------------------
+
+    private FileIngestionResult processFileForBatch(MultipartFile file, String batchId) {
         try {
             IngestionResult result = ingestFileInternal(file, batchId);
-            return new FileIngestionResult(
-                file.getOriginalFilename(),
-                true,
-                null,
-                result,
-                false
-            );
-            
+            return FileIngestionResult.ok(file.getOriginalFilename(), result);
+
+        } catch (DuplicateFileException e) {
+            log.warn("⚠️ [BATCH] Doublon : {} (batch: {})",
+                file.getOriginalFilename(), e.getExistingBatchId());
+            return FileIngestionResult.duplicate(file.getOriginalFilename(), e.getExistingBatchId());
+
         } catch (Exception e) {
-            boolean isDuplicate = e instanceof DuplicateFileException;
-            
-            if (isDuplicate) {
-                DuplicateFileException dupEx = (DuplicateFileException) e;
-                
-                log.warn("⚠️ [BATCH] Duplicate: {} (batch: {})", 
-                    file.getOriginalFilename(), dupEx.getExistingBatchId());
-                
-                return new FileIngestionResult(
-                    file.getOriginalFilename(),
-                    false,
-                    "DUPLICATE - Already processed (batch: " + dupEx.getExistingBatchId() + ")",
-                    null,
-                    true
-                );
-            } else {
-                log.error("❌ [BATCH] Failed: {}", file.getOriginalFilename(), e);
-                return new FileIngestionResult(
-                    file.getOriginalFilename(),
-                    false,
-                    e.getMessage(),
-                    null,
-                    false
-                );
-            }
+            log.error("❌ [BATCH] Échec : {}", file.getOriginalFilename(), e);
+            return FileIngestionResult.error(file.getOriginalFilename(), e.getMessage());
         }
     }
-    
+
     private IngestionStrategy selectStrategy(MultipartFile file, String extension) {
-        for (IngestionStrategy strategy : strategies) {
-            if (strategy.canHandle(file, extension)) {
-                return strategy;
-            }
-        }
-        return null;
+        return strategies.stream()
+            .filter(s -> s.canHandle(file, extension))
+            .findFirst()
+            .orElse(null);
     }
-    
+
+    private void rollbackSafely(String batchId) {
+        try {
+            int rolledBack = tracker.rollbackBatch(batchId);
+            log.info("🔄 Rollback : {} embeddings supprimés", rolledBack);
+        } catch (Exception e) {
+            log.error("❌ Erreur rollback : {}", e.getMessage());
+        }
+    }
+
+    private void scheduleCleanup(String batchId) {
+        CompletableFuture.delayedExecutor(60, TimeUnit.SECONDS)
+            .execute(() -> activeIngestions.remove(batchId));
+    }
+
     private String getExtension(String filename) {
-        if (filename == null || filename.isBlank()) {
-            return "unknown";
-        }
-        
-        int lastDot = filename.lastIndexOf('.');
-        if (lastDot == -1 || lastDot == filename.length() - 1) {
-            return "unknown";
-        }
-        
-        return filename.substring(lastDot + 1).toLowerCase();
+        if (filename == null || filename.isBlank()) return "unknown";
+        int dot = filename.lastIndexOf('.');
+        return (dot == -1 || dot == filename.length() - 1)
+            ? "unknown"
+            : filename.substring(dot + 1).toLowerCase();
     }
-    
-    // ========================================================================
-    // UTILITAIRES DOUBLONS (TOUTES INCHANGÉES)
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // API publique — déduplication
+    // -------------------------------------------------------------------------
+
     public boolean fileExists(MultipartFile file) {
         try {
-            byte[] fileBytes = file.getBytes();
-            String fileHash = deduplicationService.computeHash(fileBytes);
-            return deduplicationService.isDuplicateByHash(fileHash);
-            
+            String hash = deduplicationService.computeHash(file.getBytes());
+            return deduplicationService.isDuplicateByHash(hash);
         } catch (Exception e) {
-            log.error("❌ FileExists check error: {}", 
-                file.getOriginalFilename(), e);
+            log.error("❌ Vérification existence fichier : {}", file.getOriginalFilename(), e);
             return false;
         }
     }
-    
+
     public String getExistingBatchId(MultipartFile file) {
         try {
-            byte[] fileBytes = file.getBytes();
-            String fileHash = deduplicationService.computeHash(fileBytes);
-            
-            if (deduplicationService.isDuplicateByHash(fileHash)) {
-                String batchId = deduplicationService.getExistingBatchId(fileHash);
-                return batchId;
-            }
-            
-            return null;
-            
+            String hash = deduplicationService.computeHash(file.getBytes());
+            return deduplicationService.isDuplicateByHash(hash)
+                ? deduplicationService.getExistingBatchId(hash)
+                : null;
         } catch (Exception e) {
-            log.error("❌ ExistingBatch check error: {}", 
-                file.getOriginalFilename(), e);
+            log.error("❌ Récupération batchId existant : {}", file.getOriginalFilename(), e);
             return null;
         }
     }
-    
-    // ========================================================================
-    // MONITORING (TOUTES INCHANGÉES)
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // API publique — monitoring
+    // -------------------------------------------------------------------------
+
     public List<IngestionStatus> getActiveIngestions() {
-        return new ArrayList<>(activeIngestions.values());
+        return List.copyOf(activeIngestions.values());
     }
-    
+
     public Optional<IngestionStatus> getIngestionStatus(String batchId) {
         return Optional.ofNullable(activeIngestions.get(batchId));
     }
-    
-    public ServiceStats getStats() {
-        return new ServiceStats(
+
+    public StatsResponse getStats() {
+        return new StatsResponse(
             strategies.size(),
             activeIngestions.size(),
             tracker.getBatchCount(),
@@ -466,154 +362,33 @@ public class IngestionOrchestrator {
             ragMetrics.getActiveIngestions()
         );
     }
-    
+
     public void logStats() {
-        ServiceStats stats = getStats();
-        log.info("📊 Service Stats:");
-        log.info("   • Strategies: {}", stats.strategiesCount());
-        log.info("   • Active ingestions: {}", stats.activeIngestions());
-        log.info("   • Tracked batches: {}", stats.trackerBatches());
-        log.info("   • Tracked embeddings: {}", stats.trackerEmbeddings());
-        log.info("   • Files in progress: {}", stats.filesInProgress());
+        StatsResponse s = getStats();
+        log.info("📊 Stats — stratégies: {} | ingestions actives: {} | batches: {} | embeddings: {}",
+            s.strategiesCount(), s.activeIngestions(), s.trackerBatches(), s.trackerEmbeddings());
     }
-    
-    public HealthReport getHealthReport() {
-        boolean redisHealthy = deduplicationService.isHealthy();
-        boolean antivirusHealthy = antivirusProps.isEnabled() ? 
-            antivirusScanner.isAvailable() : true;
-        ServiceStats stats = getStats();
-        
-        String status = "HEALTHY";
-        if (!redisHealthy || !antivirusHealthy) {
-            status = "DEGRADED";
-        } else if (stats.activeIngestions() > 50) {
-            status = "OVERLOADED";
-        }
-        
-        return new HealthReport(
-            status,
-            strategies.size(),
-            stats.activeIngestions(),
-            stats.trackerBatches(),
-            redisHealthy,
-            antivirusHealthy,
-            antivirusProps.isEnabled()
-        );
+
+    public DetailedHealthResponse getHealthReport() {
+        boolean redisOk     = deduplicationService.isHealthy();
+        boolean antivirusOk = !antivirusProps.isEnabled() || antivirusScanner.isAvailable();
+        StatsResponse stats  = getStats();
+
+        String status = redisOk && antivirusOk
+            ? (stats.activeIngestions() > 50 ? "OVERLOADED" : "HEALTHY")
+            : "DEGRADED";
+
+        return new DetailedHealthResponse(status, strategies.size(), stats.activeIngestions(),
+            stats.trackerBatches(), redisOk, antivirusOk, antivirusProps.isEnabled());
     }
-    
+
     public List<String> getAvailableStrategies() {
-        return strategies.stream()
-            .map(IngestionStrategy::getName)
-            .toList();
+        return strategies.stream().map(IngestionStrategy::getName).toList();
     }
-    
+
     public List<StrategyInfo> getStrategiesInfo() {
         return strategies.stream()
-            .map(s -> new StrategyInfo(
-                s.getName(),
-                s.getPriority(),
-                s.getClass().getSimpleName()
-            ))
+            .map(s -> new StrategyInfo(s.getName(), s.getPriority(), s.getClass().getSimpleName()))
             .toList();
     }
-    
-    // ========================================================================
-    // CLASSES INTERNES (TOUTES INCHANGÉES)
-    // ========================================================================
-    
-    public static class IngestionStatus {
-        private final String batchId;
-        private final String filename;
-        private final long startTime;
-        private String strategy;
-        private boolean completed;
-        private boolean success;
-        private long duration;
-        
-        public IngestionStatus(String batchId, String filename) {
-            this.batchId = batchId;
-            this.filename = filename;
-            this.startTime = System.currentTimeMillis();
-        }
-        
-        public void setStrategy(String strategy) {
-            this.strategy = strategy;
-        }
-        
-        public void complete(boolean success, long duration) {
-            this.completed = true;
-            this.success = success;
-            this.duration = duration;
-        }
-        
-        public String getBatchId() { return batchId; }
-        public String getFilename() { return filename; }
-        public String getStrategy() { return strategy; }
-        public boolean isCompleted() { return completed; }
-        public boolean isSuccess() { return success; }
-        public long getDuration() { return duration; }
-        public long getStartTime() { return startTime; }
-    }
-    
-    public record FileIngestionResult(
-        String filename,
-        boolean success,
-        String errorMessage,
-        IngestionResult result,
-        boolean duplicate
-    ) {
-        public static FileIngestionResult ok(String filename, IngestionResult result) {
-            return new FileIngestionResult(filename, true, null, result, false);
-        }
-
-        public static FileIngestionResult duplicate(String filename, String existingBatchId) {
-            String msg = "DUPLICATE - Already processed" + 
-                (existingBatchId != null ? " (batch: " + existingBatchId + ")" : "");
-            return new FileIngestionResult(filename, false, msg, null, true);
-        }
-
-        public static FileIngestionResult error(String filename, String message) {
-            return new FileIngestionResult(filename, false, message, null, false);
-        }
-    }
-    
-    public record BatchIngestionResult(
-        String batchId,
-        List<FileIngestionResult> fileResults,
-        int successCount,
-        int failureCount,
-        int totalTextEmbeddings,
-        int totalImageEmbeddings,
-        long durationMs,
-        int duplicateCount
-    ) {}
-    
-    public record ServiceStats(
-        int strategiesCount,
-        int activeIngestions,
-        int trackerBatches,
-        int trackerEmbeddings,
-        int filesInProgress
-    ) {}
-    
-    public record HealthReport(
-        String status,
-        int strategies,
-        int activeIngestions,
-        int trackerBatches,
-        boolean redisHealthy,
-        boolean antivirusHealthy,
-        boolean antivirusEnabled
-    ) {
-        public boolean isHealthy() {
-            return "HEALTHY".equals(status);
-        }
-    }
-    
-    public record StrategyInfo(
-        String name,
-        int priority,
-        String className
-    ) {}
 }
-

@@ -202,12 +202,12 @@ public class IngestionFacadeImpl implements IngestionFacade {
 
     @Override
     public ActiveIngestionsResponse getActiveIngestions() {
-        List<IngestionStatusInfo> list = ingestionService.getActiveIngestions().stream()
-            .map(s -> IngestionStatusInfo.builder()
+        List<IngestionStatus> list = ingestionService.getActiveIngestions().stream()
+            .map(s -> IngestionStatus.builder()
                 .batchId(s.getBatchId())
                 .filename(s.getFilename())
                 .strategy(s.getStrategy())
-                .startTime(new Date(s.getStartTime()))
+                .startTime(s.getStartTime())
                 .completed(s.isCompleted())
                 .success(s.isSuccess())
                 .duration(s.getDuration())
@@ -237,14 +237,12 @@ public class IngestionFacadeImpl implements IngestionFacade {
         var report = ingestionService.getHealthReport();
         return DetailedHealthResponse.builder()
             .status(report.status())
-            .healthy(report.isHealthy())
             .strategies(report.strategies())
             .activeIngestions(report.activeIngestions())
             .trackerBatches(report.trackerBatches())
             .redisHealthy(report.redisHealthy())
             .antivirusHealthy(report.antivirusHealthy())
             .antivirusEnabled(report.antivirusEnabled())
-            .timestamp(new Date())
             .build();
     }
 

@@ -23,3 +23,20 @@ backend: http://localhost:8090/actuator/health
 redis: http://localhost:8081
 prometheus: http://localhost:9090/targets
 grafana: http://localhost:3000
+
+
+# affiche tous class java dans le dossier
+find src/main/java/com/exemple/nexrag/service/rag  -name "*.java" | grep rag
+
+# affiche tous les dossiers
+find src/main/java -type d | grep rag
+
+
+prompt::
+
+I want to create a test unitaire and integration for backend nex-rag dans le src/main/java/com/exemple/nexrag/service/rag .
+we are going to use Spec Kit for this implementation.
+if you d'ont know Speck Kit, searach for it.
+We need to have phases, and each phase will be donne with a spec using spec kit.
+voila tous mes class et tous mes dossiers vous avez tous les class et tous les dossier je veux par dossier
+service/rag/ ├── controller ├── facade ├── generation ├── ingestion ├── interceptor ├── metrics ├── retrieval ├── streaming ├── voice ├── validation, repond en francais

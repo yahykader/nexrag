@@ -379,6 +379,25 @@
     <build>
         <plugins>
             <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <version>3.4.2</version>
+                <configuration>
+                    <mainClass>com.exemple.nexrag.NexRAGApplication</mainClass>
+                </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <includes>
+                        <include>**/*Tests.java</include>
+                        <include>**/*Test.java</include>
+                        <include>**/*Spec.java</include>
+                    </includes>
+                </configuration>
+            </plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
                 <configuration>
@@ -402,6 +421,57 @@
                         </exclude>
                     </excludes>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals><goal>prepare-agent</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals><goal>report</goal></goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <phase>verify</phase>
+                        <goals><goal>check</goal></goals>
+                        <configuration>
+                            <rules>
+                                <!-- Phase 1: gate only on the 4 tested packages.
+                                     Threshold will be raised to 0.80 in Phase 7 as
+                                     coverage for the broader ingestion pipeline is added. -->
+                                <rule>
+                                    <element>CLASS</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>INSTRUCTION</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.70</minimum>
+                                        </limit>
+                                    </limits>
+                                    <includes>
+                                        <!-- Security — fully tested -->
+                                        <include>com/exemple/nexrag/service/rag/ingestion/security/ClamAvResponseParser</include>
+                                        <include>com/exemple/nexrag/service/rag/ingestion/security/ClamAvHealthScheduler</include>
+                                        <!-- Utility — fully tested -->
+                                        <include>com/exemple/nexrag/service/rag/ingestion/util/FileUtils</include>
+                                        <include>com/exemple/nexrag/service/rag/ingestion/util/InMemoryMultipartFile</include>
+                                        <!-- Dedup text — fully tested -->
+                                        <include>com/exemple/nexrag/service/rag/ingestion/deduplication/text/TextNormalizer</include>
+                                        <include>com/exemple/nexrag/service/rag/ingestion/deduplication/text/TextLocalCache</include>
+                                        <!-- Dedup file — fully tested -->
+                                        <include>com/exemple/nexrag/service/rag/ingestion/deduplication/file/HashComputer</include>
+                                    </includes>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
             </plugin>
         </plugins>
     </build>

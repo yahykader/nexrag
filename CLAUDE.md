@@ -154,3 +154,10 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - **GCP**: Terraform configs in `/terraform/`
 - **CI/CD**: GitHub Actions in `.github/workflows/` — orchestrates GCP bootstrap, Terraform provisioning, Docker build/push, and VM deployment
 - **Local**: `docker-compose.yml` starts all infrastructure; run backend and frontend separately
+
+## Active Technologies
+- Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin (001-phase1-ingestion-foundation)
+- Redis (Mockito-stubbed; no real Redis in unit tests) (001-phase1-ingestion-foundation)
+
+## Recent Changes
+- 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

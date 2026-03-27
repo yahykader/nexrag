@@ -254,3 +254,55 @@ docker-compose -f docker-compose.prod.yml up -d
 Built with ☕ Java + 🅰️ Angular + 🤖 OpenAI
 
 </div>
+
+
+
+ ### Phase 1 Implementation Complete
+
+  125 tests pass, 0 failures, BUILD SUCCESS (mvnw verify)
+
+  Test classes created (17 files)
+
+  ┌────────────────────┬──────────────────────────────┬───────┐
+  │      Package       │          Spec class          │ Tests │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ util               │ FileTypeDetectorSpec         │ 6     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ util               │ FileValidatorSpec            │ 6     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ util               │ FileUtilsSpec                │ 11    │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ util               │ MetadataSanitizerSpec        │ 9     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ util               │ InMemoryMultipartFileSpec    │ 8     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ deduplication.file │ HashComputerSpec             │ 7     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ deduplication.file │ DeduplicationStoreSpec       │ 9     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ deduplication.file │ DeduplicationServiceSpec     │ 9     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ deduplication.text │ TextNormalizerSpec           │ 8     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ deduplication.text │ TextLocalCacheSpec           │ 8     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ deduplication.text │ TextDeduplicationStoreSpec   │ 6     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ deduplication.text │ TextDeduplicationServiceSpec │ 8     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ security           │ ClamAvResponseParserSpec     │ 7     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ security           │ ClamAvSocketClientSpec       │ 5     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ security           │ AntivirusScannerSpec         │ 8     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ security           │ AntivirusGuardSpec           │ 6     │
+  ├────────────────────┼──────────────────────────────┼───────┤
+  │ security           │ ClamAvHealthSchedulerSpec    │ 4     │
+  └────────────────────┴──────────────────────────────┴───────┘
+
+  Other changes
+
+  - pom.xml — added Maven Surefire *Spec.java include pattern + JaCoCo plugin (Phase 1 coverage gate on 7 fully-tested classes at 70%)
+  - FileTypeDetector.java / FileValidator.java — added missing package declarations and minimal implementations
+  - All Spec classes: @ExtendWith(MockitoExtension.class) + French @DisplayName on every @Test

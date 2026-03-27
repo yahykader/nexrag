@@ -6,7 +6,7 @@ import org.junit.jupiter.api.Disabled;
 
 @SpringBootTest
 @Disabled("Tests désactivés temporairement")
-class nexragApplicationTests {
+class NexRAGApplicationTests {
 
     @Test
     void contextLoads() {

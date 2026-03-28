@@ -158,6 +158,8 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 ## Active Technologies
 - Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin (001-phase1-ingestion-foundation)
 - Redis (Mockito-stubbed; no real Redis in unit tests) (001-phase1-ingestion-foundation)
+- Java 21 (records, sealed classes, pattern matching disponibles) (002-phase2-ingestion-strategy)
+- Redis (Mockito-stubbé en unitaire) · pgvector (EmbeddingStore mocké) (002-phase2-ingestion-strategy)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

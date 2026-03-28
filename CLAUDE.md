@@ -160,6 +160,8 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - Redis (Mockito-stubbed; no real Redis in unit tests) (001-phase1-ingestion-foundation)
 - Java 21 (records, sealed classes, pattern matching disponibles) (002-phase2-ingestion-strategy)
 - Redis (Mockito-stubbé en unitaire) · pgvector (EmbeddingStore mocké) (002-phase2-ingestion-strategy)
+- Java 21 + Spring Boot 3.4.2, JUnit 5 (Jupiter), Mockito, AssertJ, LangChain4j 1.0.0-beta1 (003-phase3-retrieval)
+- pgvector (EmbeddingStore — mocked in unit tests), Redis (not used in retrieval phase) (003-phase3-retrieval)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

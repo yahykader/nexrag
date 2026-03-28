@@ -306,3 +306,39 @@ Built with ☕ Java + 🅰️ Angular + 🤖 OpenAI
   - pom.xml — added Maven Surefire *Spec.java include pattern + JaCoCo plugin (Phase 1 coverage gate on 7 fully-tested classes at 70%)
   - FileTypeDetector.java / FileValidator.java — added missing package declarations and minimal implementations
   - All Spec classes: @ExtendWith(MockitoExtension.class) + French @DisplayName on every @Test
+
+
+ ---
+  #### Phase 2 — Ingestion: Stratégies, Cache & Orchestration — COMPLETE  ✅                                                                                                       
+  Test Results: 416 tests, 0 failures, 1 skipped (legacy stub)
+  Key Class Coverage (all Phase 2 targets ≥ 80%):
+
+  ┌────────────────────────┬─────────────┬────────────────────────────────┐
+  │         Class          │ Instruction │             Branch             │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ RollbackExecutor       │ 100%        │ 100% ✅ (blocking requirement) │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ IngestionOrchestrator  │ 97%         │ 75%                            │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ BatchEmbeddingRegistry │ 100%        │ 100%                           │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ EmbeddingCacheStore    │ 94%         │ 90%                            │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ EmbeddingIndexer       │ 95%         │ 75%                            │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ TextChunker            │ 96%         │ 77%                            │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ VisionAnalyzer         │ 85%         │ 83%                            │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ IngestionTracker       │ 84%         │ 95%                            │
+  ├────────────────────────┼─────────────┼────────────────────────────────┤
+  │ BatchInfoRegistry      │ 90%         │ —                              │
+  └────────────────────────┴─────────────┴────────────────────────────────┘
+
+  23 new *Spec.java files committed on branch 002-phase2-ingestion-strategy (commit d6de050).
+
+  Key fixes applied:
+  - Mockito 5 default interface method behavior → doNothing().when(store).remove(anyString())
+  - langchain4j API: new Metadata() (not .empty()), Response.from(Embedding.from(...)) (not nested mocks)
+  - EmbeddingStore.add() ambiguous overload → explicit cast (TextSegment) any()
+  - Unnecessary stubs removed from ImageSaverSpec and LibreOfficeConverterSpec

@@ -134,7 +134,7 @@
 - [x] T025 Générer le rapport JaCoCo : `./mvnw test jacoco:report` — vérifier que chaque module atteint ≥ 80 % lignes + branches (`target/site/jacoco/index.html`)
 - [x] T026 [P] Compléter les chemins d'erreur manquants identifiés par JaCoCo pour atteindre ≥ 80 % sur les modules en dessous du seuil
 - [x] T027 Vérifier que `RollbackExecutorSpec` atteint **100 %** branch coverage (constitution Principe IV — seuil bloquant)
-- [ ] T028 Committer la Phase 2 : `git commit -m "test(phase-2): add ingestion strategy/cache/tracker/orchestrator specs — Phase 2 complete"`
+- [x] T028 Committer la Phase 2 : `git commit -m "test(phase-2): add ingestion strategy/cache/tracker/orchestrator specs — Phase 2 complete"`
 
 ---
 

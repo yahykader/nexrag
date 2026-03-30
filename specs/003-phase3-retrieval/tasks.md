@@ -84,7 +84,7 @@
 - [x] T013 [P] Exécuter `./mvnw test -Dtest="QueryTransformerServiceSpec,QueryRouterServiceSpec,TextVectorRetrieverSpec,BM25RetrieverSpec,ImageVectorRetrieverSpec,ParallelRetrieverServiceSpec,CrossEncoderRerankerSpec,ContentAggregatorServiceSpec,ContentInjectorServiceSpec,RetrievalAugmentorOrchestratorSpec"` depuis `nex-rag/` et confirmer que tous les tests passent (0 failures, 0 errors)
 - [x] T014 [P] Exécuter `./mvnw jacoco:report` depuis `nex-rag/` et vérifier ≥ 80 % de couverture lignes + branches pour le package `service/rag/retrieval/` dans `nex-rag/target/site/jacoco/index.html`
 - [x] T015 Vérifier la traçabilité : chaque AC de la Phase 3 dans `nexrag-test-plan-speckit.md` (AC-8.1, AC-8.2, AC-8.3, AC-9.1, AC-9.2, AC-9.3, AC-10.1, AC-10.2, AC-10.3) est couvert par au moins un `@Test` identifié dans la table de traçabilité de `research.md`
-- [ ] T016 Committer la Phase 3 selon la convention de la constitution : `test(phase-3): add retrieval specs — QueryTransformer, QueryRouter, retrievers, reranker, aggregator, injector, orchestrator`
+- [x] T016 Committer la Phase 3 selon la convention de la constitution : `test(phase-3): add retrieval specs — QueryTransformer, QueryRouter, retrievers, reranker, aggregator, injector, orchestrator`
 
 ---
 

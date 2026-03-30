@@ -342,3 +342,30 @@ Built with ☕ Java + 🅰️ Angular + 🤖 OpenAI
   - langchain4j API: new Metadata() (not .empty()), Response.from(Embedding.from(...)) (not nested mocks)
   - EmbeddingStore.add() ambiguous overload → explicit cast (TextSegment) any()
   - Unnecessary stubs removed from ImageSaverSpec and LibreOfficeConverterSpec
+
+   ---
+  #### Phase 3 — Retrieval Pipeline specs: DONE    
+                                          
+  ┌──────────────┬──────────────────────────────┐                                                                                                                         
+  │    Metric    │            Result            │                                                                                                                           ├──────────────┼──────────────────────────────┤                                                                                                                         
+  │ Tests        │ 475 total, 0 failures        │                                                                                                                         
+  ├──────────────┼──────────────────────────────┤                                                                                                                         
+  │ Instructions │ 95%                          │
+  ├──────────────┼──────────────────────────────┤
+  │ Branches     │ 80% (136/169)                │
+  ├──────────────┼──────────────────────────────┤
+  │ Lines        │ 95%                          │
+  ├──────────────┼──────────────────────────────┤
+  │ AC coverage  │ AC-8.1 → AC-10.3 all covered │
+  └──────────────┴──────────────────────────────┘
+
+  10 spec files written across 11 test classes:
+  - RetrievalTestHelper — shared infrastructure
+  - QueryTransformerServiceSpec (13 tests) — synonyms, acronyms, LLM/hybrid/rule-based/default modes, temporal context, enableSynonyms/temporal flags
+  - QueryRouterServiceSpec (11 tests) — all 4 strategies, confidence, comparative/question detection, HYBRID with image priority
+  - TextVectorRetrieverSpec, ImageVectorRetrieverSpec, BM25RetrieverSpec (10 tests)
+  - ParallelRetrieverServiceSpec (5 tests) — AC-9.1 fusion, AC-9.2 graceful timeout
+  - CrossEncoderRerankerSpec (3 tests) — AC-10.1
+  - ContentAggregatorServiceSpec (5 tests) — AC-10.2 dedup by ID, RRF k=60, finalTopK=10
+  - ContentInjectorServiceSpec (8 tests) — AC-10.3 token budget, page/slide metadata, citations toggle, >80% usage
+  - RetrievalAugmentorOrchestratorSpec (4 tests) — InOrder 5 steps, RAGMetrics, error handling

@@ -26,7 +26,7 @@
         <tag/>
         <url/>
     </scm>
-<properties>
+    <properties>
         <java.version>21</java.version>  <!-- Ou votre version Java, LangChain4j supporte 17+ -->
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
@@ -34,18 +34,42 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <!-- Version LangChain4J 1.10.0 -->
         <langchain4j.version>1.10.0</langchain4j.version>
+
+        <!-- SonarQube -->
+        <sonar.host.url>http://localhost:9000</sonar.host.url>
+        <sonar.projectKey>nex-rag</sonar.projectKey>
+        <sonar.projectName>Nex RAG</sonar.projectName>
+
+        <!-- Lien JaCoCo → Sonar -->
+        <sonar.coverage.jacoco.xmlReportPaths>
+            ${project.build.directory}/site/jacoco/jacoco.xml
+        </sonar.coverage.jacoco.xmlReportPaths>
+
+        <!-- Exclusions (optionnel mais recommandé) -->
+        <sonar.exclusions>
+            **/generated/**,
+            **/advice/**,
+            **/exception/**,
+            **/monitoring/**,
+            **/dto/**,
+            **/config/**,
+            **/constants/**,
+            **/util/**,
+            **/*Application.java
+        </sonar.exclusions>
     </properties>
+
     <dependencyManagement>
-    <dependencies>
-        <dependency>
-            <groupId>dev.langchain4j</groupId>
-            <artifactId>langchain4j-bom</artifactId>
-            <version>1.0.0-beta1</version>
-            <type>pom</type>
-            <scope>import</scope>
-        </dependency>
-    </dependencies>
-</dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>dev.langchain4j</groupId>
+                <artifactId>langchain4j-bom</artifactId>
+                <version>1.0.0-beta1</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
     <dependencies>
         <dependency>
             <groupId>com.google.cloud</groupId>
@@ -393,6 +417,11 @@
                 <configuration>
                     <mainClass>com.exemple.nexrag.NexRAGApplication</mainClass>
                 </configuration>
+            </plugin>
+            <plugin>
+                <groupId>org.sonarsource.scanner.maven</groupId>
+                <artifactId>sonar-maven-plugin</artifactId>
+                <version>4.0.0.4121</version>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>

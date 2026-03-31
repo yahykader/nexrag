@@ -138,10 +138,10 @@ RAG → historique → génération → sauvegarde de la réponse.
 - [X] T050 [P] Vérifier la couverture des AC du test plan : tracer chaque `AC-11.x` et `AC-12.x` de `nexrag-test-plan-speckit.md` (Phase 4) vers la méthode de test correspondante — confirmer 100% des AC couverts (SC-003)
 - [X] T051 Corriger les éventuels gaps de couverture identifiés en T049 dans les fichiers `*Spec.java` concernés
 - [X] T052 Vérifier que chaque `@Test` a un `@DisplayName` français au format `"DOIT [action] quand [condition]"` dans tous les 4 fichiers `*Spec.java`
-- [ ] T053 Committer `ConversationManagerSpec.java` : `test(phase-4): add ConversationManagerSpec — création, historique fenêtré, TTL Redis`
-- [ ] T054 [P] Committer `EventEmitterSpec.java` : `test(phase-4): add EventEmitterSpec — émission SSE, buffering tokens, terminality DONE`
-- [ ] T055 [P] Committer `OpenAiStreamingClientSpec.java` : `test(phase-4): add OpenAiStreamingClientSpec — streaming SSE WireMock, erreurs HTTP`
-- [ ] T056 Committer `StreamingOrchestratorSpec.java` : `test(phase-4): add StreamingOrchestratorSpec — pipeline RAG→historique→génération`
+- [X] T053 Committer `ConversationManagerSpec.java` : `test(phase-4): add ConversationManagerSpec — création, historique fenêtré, TTL Redis`
+- [X] T054 [P] Committer `EventEmitterSpec.java` : `test(phase-4): add EventEmitterSpec — émission SSE, buffering tokens, terminality DONE`
+- [X] T055 [P] Committer `OpenAiStreamingClientSpec.java` : `test(phase-4): add OpenAiStreamingClientSpec — streaming SSE WireMock, erreurs HTTP`
+- [X] T056 Committer `StreamingOrchestratorSpec.java` : `test(phase-4): add StreamingOrchestratorSpec — pipeline RAG→historique→génération`
 
 ---
 

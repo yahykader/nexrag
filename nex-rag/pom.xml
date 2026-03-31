@@ -48,9 +48,13 @@
         <!-- Exclusions (optionnel mais recommandé) -->
         <sonar.exclusions>
             **/generated/**,
+            **/advice/**,
+            **/exception/**,
+            **/monitoring/**,
             **/dto/**,
-            **/model/**,
             **/config/**,
+            **/constants/**,
+            **/util/**,
             **/*Application.java
         </sonar.exclusions>
     </properties>

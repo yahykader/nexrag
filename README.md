@@ -374,7 +374,7 @@ Built with ☕ Java + 🅰️ Angular + 🤖 OpenAI
   - RetrievalAugmentorOrchestratorSpec (4 tests) — InOrder 5 steps, RAGMetrics, error handling
 
 
-                                                                                                                       #### Phase 4 is complete.
+  #### Phase 4 is complete.
   52 tests, 0 failures, 2 @Disabled (gap documentation)
 
   5 commits on 004-phase-4-streaming:

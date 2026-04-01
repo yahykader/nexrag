@@ -255,6 +255,14 @@ openai:
     max-retries: 3
     log-requests: false
     log-responses: false
+  # -------------------------------------------------------------------------
+  # Whisper — transcription audio
+  # -------------------------------------------------------------------------
+  whisper:
+    model: whisper-1
+    timeout-seconds: 30
+    default-extension: .webm
+    min-audio-bytes: 1000
 
 # ============================================================================
 # VISION AI

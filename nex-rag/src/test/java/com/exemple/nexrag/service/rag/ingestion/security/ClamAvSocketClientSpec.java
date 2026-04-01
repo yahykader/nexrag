@@ -159,8 +159,14 @@ class ClamAvSocketClientSpec {
      * Simule ClamAV pour un PING → répond PONG.
      */
     private static void simulatePingServer(ServerSocket server) {
-        try (Socket conn = server.accept();
-             OutputStream out = conn.getOutputStream()) {
+        try (Socket conn        = server.accept();
+            DataInputStream in  = new DataInputStream(conn.getInputStream());
+            OutputStream out    = conn.getOutputStream()) {
+
+            // Lire la commande "PING\n" (5 octets) avant de répondre
+            byte[] cmd = new byte[5];
+            in.readFully(cmd);
+
             out.write("PONG\n".getBytes(StandardCharsets.US_ASCII));
             out.flush();
         } catch (Exception e) {

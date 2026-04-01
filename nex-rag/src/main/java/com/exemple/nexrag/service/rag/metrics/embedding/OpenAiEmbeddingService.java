@@ -5,160 +5,135 @@ import dev.langchain4j.data.embedding.Embedding;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.model.embedding.EmbeddingModel;
 import dev.langchain4j.model.output.Response;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 /**
- * Service d'embedding OpenAI
- * 
- * ✅ ADAPTÉ AVEC RAGMetrics unifié
- * 
- * Utilise OpenAI text-embedding-3-small ou similar
+ * Service d'embedding OpenAI.
+ *
+ * Principe SRP  : unique responsabilité → générer des embeddings
+ *                 via le modèle OpenAI configuré.
+ * Clean code    : {@code embedWithMetrics()} factorise le bloc
+ *                 try-catch-métrique dupliqué dans les 3 méthodes.
+ *                 {@code embedImage()} supprimé — retournait {@code null}
+ *                 (contrat cassé). À réintroduire quand un modèle image
+ *                 sera disponible.
+ *                 {@code Collectors.toList()} → {@code .toList()} (Java 16+).
+ *
+ * @author ayahyaoui
+ * @version 2.0
  */
 @Slf4j
 @Service
+@RequiredArgsConstructor
 public class OpenAiEmbeddingService {
-    
+
     private final EmbeddingModel embeddingModel;
-    private final RAGMetrics ragMetrics;  // ✅ Métriques unifiées
-    
-    public OpenAiEmbeddingService(
-            EmbeddingModel embeddingModel,
-            RAGMetrics ragMetrics) {
-        
-        this.embeddingModel = embeddingModel;
-        this.ragMetrics = ragMetrics;
-    }
-    
+    private final RAGMetrics     ragMetrics;
+
+    // -------------------------------------------------------------------------
+    // API publique
+    // -------------------------------------------------------------------------
+
     /**
-     * Génère embedding pour un texte
+     * Génère l'embedding d'un texte brut.
+     *
+     * @param text texte à vectoriser
+     * @return embedding résultant
+     * @throws RuntimeException si l'appel API échoue
      */
     public Embedding embedText(String text) {
-        long start = System.currentTimeMillis();
-        
-        try {
-            Response<Embedding> response = embeddingModel.embed(text);
-            Embedding embedding = response.content();
-            
-            long duration = System.currentTimeMillis() - start;
-            
-            // ✅ MÉTRIQUE: API call success
-            ragMetrics.recordApiCall("embed_text", duration);
-            
-            log.debug("✅ Embedded text: {} chars in {}ms", text.length(), duration);
-            
-            return embedding;
-            
-        } catch (Exception e) {
-            log.error("❌ Embedding failed for text", e);
-            
-            // ✅ MÉTRIQUE: API call error
-            ragMetrics.recordApiError("embed_text");
-            
-            throw new RuntimeException("Text embedding failed", e);
-        }
+        return embedWithMetrics(
+            "embed_text",
+            () -> embeddingModel.embed(text).content(),
+            "text (%d chars)".formatted(text.length())
+        );
     }
-    
+
     /**
-     * Génère embedding pour un segment de texte
+     * Génère l'embedding d'un segment LangChain4j.
+     *
+     * @param segment segment à vectoriser
+     * @return embedding résultant
+     * @throws RuntimeException si l'appel API échoue
      */
     public Embedding embedSegment(TextSegment segment) {
-        long start = System.currentTimeMillis();
-        
-        try {
-            Response<Embedding> response = embeddingModel.embed(segment);
-            Embedding embedding = response.content();
-            
-            long duration = System.currentTimeMillis() - start;
-            
-            // ✅ MÉTRIQUE: API call success
-            ragMetrics.recordApiCall("embed_segment", duration);
-            
-            log.debug("✅ Embedded segment in {}ms", duration);
-            
-            return embedding;
-            
-        } catch (Exception e) {
-            log.error("❌ Embedding failed for segment", e);
-            
-            // ✅ MÉTRIQUE: API call error
-            ragMetrics.recordApiError("embed_segment");
-            
-            throw new RuntimeException("Segment embedding failed", e);
-        }
+        return embedWithMetrics(
+            "embed_segment",
+            () -> embeddingModel.embed(segment).content(),
+            "segment"
+        );
     }
-    
+
     /**
-     * Génère embeddings pour une liste de textes (batch)
+     * Génère les embeddings d'une liste de textes en batch.
+     *
+     * @param texts liste de textes à vectoriser
+     * @return liste d'embeddings dans le même ordre
+     * @throws RuntimeException si l'appel API échoue
      */
     public List<Embedding> embedBatch(List<String> texts) {
-        long start = System.currentTimeMillis();
-        
-        try {
-            List<TextSegment> segments = texts.stream()
-                .map(TextSegment::from)
-                .collect(Collectors.toList());
-            
-            Response<List<Embedding>> response = embeddingModel.embedAll(segments);
-            List<Embedding> embeddings = response.content();
-            
-            long duration = System.currentTimeMillis() - start;
-            
-            // ✅ MÉTRIQUE: API call batch success
-            ragMetrics.recordApiCall("embed_batch", duration);
-            
-            log.debug("✅ Embedded batch: {} texts in {}ms", texts.size(), duration);
-            
-            return embeddings;
-            
-        } catch (Exception e) {
-            log.error("❌ Batch embedding failed", e);
-            
-            // ✅ MÉTRIQUE: API call error
-            ragMetrics.recordApiError("embed_batch");
-            
-            throw new RuntimeException("Batch embedding failed", e);
-        }
+        List<TextSegment> segments = texts.stream()
+            .map(TextSegment::from)
+            .toList();                          // ✅ Java 16+ — plus de Collectors.toList()
+
+        return embedWithMetrics(
+            "embed_batch",
+            () -> embeddingModel.embedAll(segments).content(),
+            "batch (%d texts)".formatted(texts.size())
+        );
     }
-    
-    /**
-     * Génère embedding pour une image (si supporté)
-     */
-    public Embedding embedImage(byte[] imageData) {
-        long start = System.currentTimeMillis();
-        
-        try {
-            // Note: Implémentation dépend du modèle d'embedding image utilisé
-            // Pour l'instant, placeholder
-            
-            // TODO: Implémenter embedding image avec CLIP ou similaire
-            
-            long duration = System.currentTimeMillis() - start;
-            
-            // ✅ MÉTRIQUE: API call success
-            ragMetrics.recordApiCall("embed_image", duration);
-            
-            log.debug("✅ Embedded image in {}ms", duration);
-            
-            return null; // Placeholder
-            
-        } catch (Exception e) {
-            log.error("❌ Image embedding failed", e);
-            
-            // ✅ MÉTRIQUE: API call error
-            ragMetrics.recordApiError("embed_image");
-            
-            throw new RuntimeException("Image embedding failed", e);
-        }
-    }
-    
-    /**
-     * Retourne la dimension des embeddings
-     */
+
+    /** Retourne la dimension des vecteurs produits par le modèle. */
     public int getDimension() {
         return embeddingModel.dimension();
+    }
+
+    // -------------------------------------------------------------------------
+    // Privé — pipeline embedding + métriques factorisé
+    // -------------------------------------------------------------------------
+
+    /**
+     * Exécute une opération d'embedding en enregistrant durée et erreurs.
+     *
+     * <p>Factorise le bloc try-catch-métrique identique dans
+     * {@code embedText}, {@code embedSegment} et {@code embedBatch}.
+     *
+     * @param operation   nom de l'opération pour les métriques
+     * @param supplier    lambda qui appelle l'API
+     * @param description description pour le log
+     * @return résultat du supplier
+     * @throws RuntimeException si le supplier lève une exception
+     */
+    private <T> T embedWithMetrics(String operation,
+                                    EmbeddingSupplier<T> supplier,
+                                    String description) {
+        long start = System.currentTimeMillis();
+        try {
+            T result   = supplier.get();
+            long duration = System.currentTimeMillis() - start;
+
+            ragMetrics.recordApiCall(operation, duration);
+            log.debug("✅ Embedding réussi ({}) en {}ms", description, duration);
+
+            return result;
+
+        } catch (Exception e) {
+            ragMetrics.recordApiError(operation);
+            log.error("❌ Embedding échoué ({}) : {}", description, e.getMessage(), e);
+            throw new RuntimeException("Embedding échoué — " + description, e);
+        }
+    }
+
+    /**
+     * Interface fonctionnelle pour les lambdas d'embedding
+     * qui déclarent {@code throws Exception}.
+     */
+    @FunctionalInterface
+    private interface EmbeddingSupplier<T> {
+        T get() throws Exception;
     }
 }

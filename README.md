@@ -121,7 +121,10 @@ spring:
   datasource:
     url: jdbc:postgresql://localhost:5432/nexrag
 ```
-
+'''
+### Sonar 
+  mvn clean verify sonar:sonar -Dsonar.token=$SONAR_TOKEN
+'''
 ---
 
 ## 📡 API

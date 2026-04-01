@@ -104,6 +104,10 @@ public class WhisperService {
         if (audioBytes == null || audioBytes.length == 0) {
             throw new IllegalArgumentException("Données audio vides ou absentes");
         }
+        if (audioBytes.length > 26_214_400) { // 25 MB
+            throw new IllegalArgumentException(
+                "La taille du fichier audio dépasse la limite de 25 MB");
+        }
         if (audioBytes.length < props.getMinAudioBytes()) {
             log.warn("⚠️ [Whisper] Audio très court : {} bytes — possible silence",
                 audioBytes.length);
@@ -123,7 +127,8 @@ public class WhisperService {
         long   duration   = System.currentTimeMillis() - start;
 
         log.info("⏱️ [Whisper] Appel API : {}ms", duration);
-        log.debug("📝 [Whisper] Transcription brute : '{}'", transcript);
+        log.debug("📝 [Whisper] Transcription brute : [{} chars]",
+            transcript != null ? transcript.length() : 0);
 
         return transcript;
     }
@@ -137,9 +142,7 @@ public class WhisperService {
         }
 
         String result = transcript.trim();
-        log.info("✅ [Whisper] Transcription réussie — {} caractères : '{}'",
-            result.length(),
-            result.length() > 100 ? result.substring(0, 100) + "..." : result);
+        log.info("✅ [Whisper] Transcription réussie — {} caractères", result.length());
 
         return result;
     }

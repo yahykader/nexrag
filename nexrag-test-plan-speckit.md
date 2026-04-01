@@ -543,6 +543,8 @@ class OpenAiStreamingClientSpec {
 
 # PHASE 5 — Voice & Metrics
 
+
+
 ## Spec : `phase-05-voice-metrics.md`
 
 ### User Stories
@@ -551,27 +553,34 @@ class OpenAiStreamingClientSpec {
 > En tant qu'utilisateur, je veux envoyer un fichier audio et recevoir sa transcription, afin d'utiliser le RAG en mode vocal.
 
 **Functional Requirements**
-- FR-13.1 : `WhisperService` envoie l'audio à l'API Whisper d'OpenAI
-- FR-13.2 : La transcription retournée est une `String` non vide pour un audio valide
-- FR-13.3 : Un audio vide ou corrompu lève `TranscriptionException`
+- FR-13.1 : `WhisperService.transcribeAudio()` orchestre validation → fichier temp → appel API → validation du résultat
+- FR-13.2 : La transcription retournée est une `String` non vide et trimmée pour un audio valide
+- FR-13.3 : Un audio nul ou de taille 0 lève `IllegalArgumentException("Données audio vides ou absentes")`
+- FR-13.4 : `AudioTempFile.create()` utilise l'extension du fichier original ; `.webm` par défaut si absente
 
 **Acceptance Criteria**
-- AC-13.1 : Un fichier WAV valide retourne une transcription non vide
-- AC-13.2 : Un fichier de 0 octet lève `TranscriptionException`
-- AC-13.3 : L'appel HTTP à Whisper inclut le header `Authorization: Bearer <key>`
+- AC-13.1 : Un tableau de bytes valide retourne une transcription non vide et trimmée
+- AC-13.2 : Un tableau de bytes nul ou vide lève `IllegalArgumentException`
+- AC-13.3 : `WhisperService.isAvailable()` retourne `true` si `apiKey` est non blank, `false` sinon
+- AC-13.4 : `AudioTempFile.create("audio.mp3")` produit un fichier temporaire avec l'extension `.mp3`
+- AC-13.5 : `AudioTempFile.deleteSilently(null)` ne lève aucune exception
 
 #### US-14 : Métriques et observabilité
 > En tant qu'ops, je veux mesurer les performances du RAG, afin de détecter les dégradations.
 
 **Functional Requirements**
-- FR-14.1 : `RAGMetrics` enregistre latence, nombre de tokens et score de pertinence
-- FR-14.2 : `CacheService` expose le taux de cache hit/miss pour les embeddings
-- FR-14.3 : `OpenAiEmbeddingService` mesure la latence de chaque appel API embedding
+- FR-14.1 : `RAGMetrics` enregistre `Timer`, `Counter` et `Gauge` Micrometer pour chaque couche du pipeline (ingestion, retrieval, generation, cache, API)
+- FR-14.2 : `RAGMetrics` expose le hit/miss de cache via `recordCacheHit(cacheType)` / `recordCacheMiss(cacheType)`
+- FR-14.3 : `OpenAiEmbeddingService` appelle `ragMetrics.recordApiCall(operation, durationMs)` en succès et `ragMetrics.recordApiError(operation)` en échec
+- FR-14.4 : `RAGMetrics` accumule `totalTokensGenerated` atomiquement via `recordGeneration(durationMs, tokens)`
+- FR-14.5 : `RAGMetrics` reflète les opérations actives via `getActiveIngestions()` / `getActiveQueries()`
 
 **Acceptance Criteria**
-- AC-14.1 : Après 10 requêtes, les compteurs Micrometer sont incrémentés correctement
-- AC-14.2 : Un cache hit n'incrémente pas le compteur d'appels OpenAI
-- AC-14.3 : La latence moyenne est calculée sur une fenêtre glissante
+- AC-14.1 : Après `recordIngestionSuccess("pdf", 100, 5)`, `rag_ingestion_files_total{strategy=pdf,status=success}` vaut 1 et `getTotalFilesProcessed()` vaut 1
+- AC-14.2 : `startIngestion()` incrémente `getActiveIngestions()` ; `endIngestion()` le ramène à 0
+- AC-14.3 : `recordCacheHit("embedding")` incrémente `rag_cache_hits_total{cache=embedding}` sans toucher au counter miss
+- AC-14.4 : `OpenAiEmbeddingService.embedText()` appelle `recordApiCall("embed_text", _)` ; en cas d'exception du modèle, appelle `recordApiError("embed_text")` et relève une `RuntimeException`
+- AC-14.5 : Après `recordGeneration(100, 80)` puis `recordGeneration(200, 70)`, `getTotalTokensGenerated()` vaut 150
 
 ---
 
@@ -580,12 +589,117 @@ class OpenAiStreamingClientSpec {
 ```
 src/test/java/com/exemple/nexrag/service/rag/
 ├── voice/
-│   └── WhisperServiceSpec.java
+│   ├── WhisperServiceSpec.java
+│   └── AudioTempFileSpec.java
 └── metrics/
     ├── RAGMetricsSpec.java
-    ├── CacheServiceSpec.java
     └── embedding/
         └── OpenAiEmbeddingServiceSpec.java
+```
+
+---
+
+### Exemple de Spec — `WhisperServiceSpec.java`
+
+```java
+@ExtendWith(MockitoExtension.class)
+@DisplayName("Spec : WhisperService — Validation et disponibilité du service Whisper")
+class WhisperServiceSpec {
+
+    @Mock private WhisperProperties props;
+    @Mock private AudioTempFile     audioTempFile;
+    @InjectMocks private WhisperService service;
+
+    @BeforeEach
+    void setUp() {
+        // @Value("${openai.api.key}") non injecté par Mockito — ReflectionTestUtils requis
+        ReflectionTestUtils.setField(service, "apiKey", "test-key-fake");
+        lenient().when(props.getMinAudioBytes()).thenReturn(1_000);
+    }
+
+    // US-1 / AC-13.2
+    @Test
+    @DisplayName("DOIT lever IllegalArgumentException quand l'audio est null")
+    void devraitLeverIllegalArgumentExceptionPourAudioNull() {
+        assertThatThrownBy(() -> service.transcribeAudio(null, "test.wav", "fr"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessage("Données audio vides ou absentes");
+    }
+
+    // US-1 / FR-001
+    @Test
+    @DisplayName("DOIT lever IllegalArgumentException quand la taille dépasse 25 MB")
+    void devraitLeverIllegalArgumentExceptionSiTailleDepasse25Mo() {
+        byte[] tooBig = new byte[26_214_401]; // 25 MB + 1 byte
+
+        assertThatThrownBy(() -> service.transcribeAudio(tooBig, "gros.wav", "fr"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("25 MB");
+    }
+}
+```
+
+---
+
+### Exemple de Spec — `RAGMetricsSpec.java`
+
+```java
+@DisplayName("Spec : RAGMetrics — Métriques centralisées du pipeline RAG")
+class RAGMetricsSpec {
+
+    private MeterRegistry registry;
+    private RAGMetrics    metrics;
+
+    @BeforeEach
+    void setUp() {
+        registry = new SimpleMeterRegistry();
+        metrics  = new RAGMetrics(registry);
+    }
+
+    // US-2 / AC-14.1
+    @Test
+    @DisplayName("DOIT incrémenter le counter de succès après une ingestion réussie")
+    void devraitIncrementerCompteurSuccesApresIngestionReussie() {
+        metrics.recordIngestionSuccess("pdf", 100, 5);
+
+        assertThat(registry.counter("rag_ingestion_files_total",
+                "strategy", "pdf", "status", "success").count())
+            .isEqualTo(1.0);
+        assertThat(metrics.getTotalFilesProcessed()).isEqualTo(1L);
+    }
+
+    // US-2 / AC-14.2
+    @Test
+    @DisplayName("DOIT suivre les ingestions actives via startIngestion et endIngestion")
+    void devraitSuivreIngestionsActivesViaStartEtEnd() {
+        metrics.startIngestion();
+        assertThat(metrics.getActiveIngestions()).isEqualTo(1);
+
+        metrics.endIngestion();
+        assertThat(metrics.getActiveIngestions()).isEqualTo(0);
+    }
+
+    // US-2 / AC-14.3
+    @Test
+    @DisplayName("DOIT incrémenter uniquement le counter hit sans affecter le counter miss")
+    void devraitIncrementerSeulementLeCompteurHitSansAffecterMiss() {
+        metrics.recordCacheHit("embedding");
+
+        assertThat(registry.counter("rag_cache_hits_total", "cache", "embedding").count())
+            .isEqualTo(1.0);
+        assertThat(registry.find("rag_cache_misses_total").counter()).isNull();
+    }
+
+    // US-2 / AC-14.5
+    @Test
+    @DisplayName("DOIT accumuler correctement les tokens générés sur plusieurs appels")
+    void devraitAccumulerTokensGeneresCorrectementSurPlusieursAppels() {
+        metrics.recordGeneration(100, 80);
+        metrics.recordGeneration(200, 70);
+
+        assertThat(metrics.getTotalTokensGenerated()).isEqualTo(150L);
+    }
+}
 ```
 
 ---

@@ -164,6 +164,8 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - pgvector (EmbeddingStore — mocked in unit tests), Redis (not used in retrieval phase) (003-phase3-retrieval)
 - Java 21 (Spring Boot 3.4.2) (004-phase-4-streaming)
 - Redis (clé `conversation:{id}`, TTL 3600s, `ConversationState` sérialisée en JSON) (004-phase-4-streaming)
+- Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test, reactor-test (StepVerifier for Flux-based streaming) (006-phase6-facade)
+- N/A — all dependencies mocked; no real infrastructure in unit tests (006-phase6-facade)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

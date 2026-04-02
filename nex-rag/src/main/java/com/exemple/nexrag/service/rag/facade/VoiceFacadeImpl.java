@@ -38,7 +38,7 @@ public class VoiceFacadeImpl implements VoiceFacade {
 
         logAudioReceived(audioFile, language);
 
-        String transcript = executeTranscription(audioFile, language);
+        String transcript = executeTranscription(audioFile, language).strip();
 
         log.info("✅ [Voice] Transcription réussie — {} caractères", transcript.length());
 

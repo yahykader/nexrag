@@ -1,12 +1,16 @@
 package com.exemple.nexrag.advice;
 
+import com.exemple.nexrag.service.rag.controller.MultimodalCrudController;
 import com.exemple.nexrag.dto.DeleteResponse;
 import com.exemple.nexrag.exception.ResourceNotFoundException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+import java.util.Map;
 
 /**
  * Gestionnaire global d'exceptions pour les controllers CRUD.
@@ -15,8 +19,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * Clean code   : élimine les 8 blocs try/catch dupliqués dans le controller.
  */
 @Slf4j
-@RestControllerAdvice
+@RestControllerAdvice(assignableTypes = MultimodalCrudController.class)
 public class CrudExceptionHandler {
+
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<?> handleMissingParam(MissingServletRequestParameterException e) {
+        log.warn("⚠️ Paramètre manquant : {}", e.getParameterName());
+        return ResponseEntity.badRequest()
+            .body(Map.of("error", "Paramètre manquant : " + e.getParameterName()));
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<DeleteResponse> handleNotFound(ResourceNotFoundException e) {

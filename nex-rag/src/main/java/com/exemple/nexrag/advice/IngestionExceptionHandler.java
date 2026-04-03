@@ -1,5 +1,7 @@
 package com.exemple.nexrag.advice;
 
+import com.exemple.nexrag.service.rag.controller.MultimodalIngestionController;
+import com.exemple.nexrag.dto.ErrorResponse;
 import com.exemple.nexrag.dto.IngestionResponse;
 import com.exemple.nexrag.exception.DuplicateFileException;
 import com.exemple.nexrag.exception.ResourceNotFoundException;
@@ -8,15 +10,18 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 /**
  * Gestionnaire global des exceptions du controller d'ingestion.
  *
  * Principe SRP : unique responsabilité → traduire les exceptions en réponses HTTP.
  * Clean code   : supprime les 6 blocs try/catch dupliqués dans le controller.
+ *                Supprime le doublon handleDuplicate — une seule méthode par exception.
+ *                Supprime @ResponseStatus redondant — ResponseEntity prime toujours.
  */
 @Slf4j
-@RestControllerAdvice
+@RestControllerAdvice(assignableTypes = MultimodalIngestionController.class)
 public class IngestionExceptionHandler {
 
     @ExceptionHandler(DuplicateFileException.class)
@@ -30,6 +35,13 @@ public class IngestionExceptionHandler {
                 .existingBatchId(e.getExistingBatchId())
                 .message("Ce fichier a déjà été uploadé et traité")
                 .build());
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingPart(MissingServletRequestPartException e) {
+        log.warn("⚠️ Paramètre multipart manquant : {}", e.getRequestPartName());
+        return ResponseEntity.badRequest()
+            .body(new ErrorResponse("Paramètre manquant : " + e.getRequestPartName()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

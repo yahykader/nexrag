@@ -1,5 +1,6 @@
 package com.exemple.nexrag.service.rag.streaming.model;
 
+import jakarta.validation.constraints.NotBlank;
 import lombok.Builder;
 import lombok.Data;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -12,6 +13,7 @@ import java.util.*;
 @Data
 @Builder
 public class StreamingRequest {
+    @NotBlank
     private String query;
     private String conversationId;
     private String userId;

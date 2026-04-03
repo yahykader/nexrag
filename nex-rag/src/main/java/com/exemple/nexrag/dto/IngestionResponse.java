@@ -2,12 +2,14 @@ package com.exemple.nexrag.dto;
 
 import lombok.Builder;
 import lombok.Value;
+import lombok.AllArgsConstructor;
 
 /**
  * Réponse pour un upload synchrone.
  */
 @Value
 @Builder
+@AllArgsConstructor
 public class IngestionResponse {
     Boolean success;
     String  batchId;

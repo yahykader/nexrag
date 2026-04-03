@@ -1,4 +1,4 @@
-package com.exemple.nexrag.controller;
+package com.exemple.nexrag.service.rag.controller;
 
 import com.exemple.nexrag.dto.*;
 import com.exemple.nexrag.service.rag.facade.CrudFacade;

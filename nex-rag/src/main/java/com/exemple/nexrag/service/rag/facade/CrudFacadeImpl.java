@@ -160,7 +160,7 @@ public class CrudFacadeImpl implements CrudFacade {
             log.info("⚠️ Doublon détecté — file={}, batchId={}", file.getOriginalFilename(), batchId);
 
             return DuplicateCheckResponse.builder()
-                .isDuplicate(true)
+                .duplicate(true)
                 .filename(file.getOriginalFilename())
                 .existingBatchId(batchId)
                 .message("Ce fichier existe déjà dans le système")
@@ -168,7 +168,7 @@ public class CrudFacadeImpl implements CrudFacade {
         }
 
         return DuplicateCheckResponse.builder()
-            .isDuplicate(false)
+            .duplicate(false)
             .filename(file.getOriginalFilename())
             .message("Fichier non trouvé — peut être uploadé")
             .build();

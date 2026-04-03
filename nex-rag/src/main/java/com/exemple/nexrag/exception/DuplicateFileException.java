@@ -22,4 +22,8 @@ public class DuplicateFileException extends RuntimeException {
         super(message);
         this.existingBatchId = null;
     }
+
+    public String getExistingBatchId() {
+        return existingBatchId;
+    }
 }

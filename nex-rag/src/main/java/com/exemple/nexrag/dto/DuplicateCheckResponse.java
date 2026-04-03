@@ -11,7 +11,7 @@ import lombok.Value;
 @Value
 @Builder
 public class DuplicateCheckResponse {
-    Boolean isDuplicate;
+    Boolean duplicate;
     String  filename;
     String  existingBatchId;
     String  message;

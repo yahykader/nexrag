@@ -4,8 +4,8 @@
 // ============================================================================
 package com.exemple.nexrag.service.rag.interceptor;
 
-import com.exemple.nexrag.service.rag.ingestion.ratelimit.RateLimitService;
-import com.exemple.nexrag.service.rag.ingestion.ratelimit.RateLimitService.RateLimitResult;
+import com.exemple.nexrag.service.rag.interceptor.RateLimitService;
+import com.exemple.nexrag.service.rag.interceptor.RateLimitService.RateLimitResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;

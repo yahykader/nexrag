@@ -1,8 +1,4 @@
-// ============================================================================
-// SERVICE - RateLimitService.java
-// Service pour appliquer le Rate Limiting
-// ============================================================================
-package com.exemple.nexrag.service.rag.ingestion.ratelimit;
+package com.exemple.nexrag.service.rag.interceptor;
 
 import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;

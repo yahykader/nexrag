@@ -1,7 +1,7 @@
 package com.exemple.nexrag.service.rag.controller;
 
 import com.exemple.nexrag.config.TestWebConfig;
-import com.exemple.nexrag.service.rag.ingestion.ratelimit.RateLimitService;
+import com.exemple.nexrag.service.rag.interceptor.RateLimitService;
 import com.exemple.nexrag.advice.VoiceExceptionHandler;
 import com.exemple.nexrag.constant.VoiceConstants;
 import com.exemple.nexrag.dto.TranscriptionResponse;

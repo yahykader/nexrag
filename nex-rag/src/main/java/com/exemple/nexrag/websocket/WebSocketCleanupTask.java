@@ -1,54 +1,60 @@
 package com.exemple.nexrag.websocket;
 
+import com.exemple.nexrag.config.WebSocketProperties;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Scheduled task pour cleanup automatique des sessions WebSocket
- * 
- * Runs every hour to clean up inactive sessions
+ * Tâche planifiée de nettoyage des sessions WebSocket inactives.
+ *
+ * Principe SRP  : unique responsabilité → déclencher périodiquement le
+ *                 nettoyage et le log des statistiques.
+ * Principe DIP  : dépend de {@link WebSocketProperties} — les intervalles
+ *                 sont configurables sans recompilation.
+ * Clean code    : injection par constructeur via {@code @RequiredArgsConstructor}
+ *                 au lieu de {@code @Autowired} field injection.
+ *                 Magic numbers supprimés — intervalles dans {@link WebSocketProperties}.
+ *
+ * @author ayahyaoui
+ * @version 2.0
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class WebSocketCleanupTask {
-    
-    @Autowired
-    private WebSocketSessionManager sessionManager;
-    
-    // Cleanup threshold: 1 hour
-    private static final long INACTIVE_THRESHOLD_MS = 3600000; // 1 hour
-    
+
+    private final WebSocketSessionManager sessionManager;
+    private final WebSocketProperties     props;
+
     /**
-     * Cleanup task executed every hour
+     * Nettoyage des sessions inactives.
+     * Intervalle configurable via {@code websocket.cleanup-interval-ms}.
      */
-    @Scheduled(fixedRate = 3600000) // Every 1 hour
+    @Scheduled(fixedRateString = "${websocket.cleanup-interval-ms:3600000}")
     public void cleanupInactiveSessions() {
-        log.info("🧹 Starting scheduled cleanup of inactive WebSocket sessions...");
-        
-        int beforeCount = sessionManager.getActiveSessionCount();
-        
-        sessionManager.cleanupInactiveSessions(INACTIVE_THRESHOLD_MS);
-        
-        int afterCount = sessionManager.getActiveSessionCount();
-        int cleaned = beforeCount - afterCount;
-        
-        log.info("🧹 Cleanup completed: {} sessions removed, {} remaining", 
-            cleaned, afterCount);
+        log.info("🧹 Démarrage nettoyage des sessions WebSocket inactives...");
+
+        int before = sessionManager.getActiveSessionCount();
+        sessionManager.cleanupInactiveSessions(props.getInactiveThresholdMs());
+        int cleaned = before - sessionManager.getActiveSessionCount();
+
+        log.info("🧹 Nettoyage terminé : {} supprimées, {} restantes",
+            cleaned, sessionManager.getActiveSessionCount());
     }
-    
+
     /**
-     * Log stats every 5 minutes
+     * Log des statistiques WebSocket.
+     * Intervalle configurable via {@code websocket.stats-interval-ms}.
      */
-    @Scheduled(fixedRate = 300000) // Every 5 minutes
+    @Scheduled(fixedRateString = "${websocket.stats-interval-ms:300000}")
     public void logStats() {
-        var stats = sessionManager.getStats();
-        
-        log.info("📊 WebSocket Stats: {} active, {} total, avg {} msg/session, avg duration {}ms",
+        WebSocketSessionManager.SessionStats stats = sessionManager.getStats();
+        log.info("📊 WebSocket — actives: {} | total: {} | moy. msg/session: {} | moy. durée: {}ms",
             stats.getActiveSessions(),
             stats.getTotalSessions(),
-            String.format("%.2f", stats.getAvgMessagesPerSession()),
+            "%.2f".formatted(stats.getAvgMessagesPerSession()),
             stats.getAvgConnectionDuration());
     }
 }

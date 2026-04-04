@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.Set;
 
@@ -23,7 +23,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * Spec : WebSocketStatsController — statistiques et monitoring des sessions WebSocket
  *
  * Principe SRP : valide uniquement le routage HTTP, les champs de réponse JSON
- * et le cas HTTP 404 pour une session inconnue. Délègue à WebSocketSessionManager (mocké).
+ *                et le cas HTTP 404 pour une session inconnue.
+ *                Délègue à WebSocketSessionManager (mocké).
+ * Clean code    : {@code buildStats()} et {@code buildSessionInfo()} utilisent
+ *                 les constructeurs corrects après le refactoring de SessionStats
+ *                 et SessionInfo (suppression de @Data → @Getter uniquement).
  */
 @DisplayName("Spec : WebSocketStatsController — statistiques des sessions WebSocket")
 @WebMvcTest(WebSocketStatsController.class)
@@ -43,8 +47,7 @@ class WebSocketStatsControllerSpec {
     @Test
     @DisplayName("DOIT retourner 200 avec les statistiques globales des sessions")
     void shouldReturn200ForStats() throws Exception {
-        SessionStats stats = buildStats(3, 10);
-        when(sessionManager.getStats()).thenReturn(stats);
+        when(sessionManager.getStats()).thenReturn(buildStats(3, 10));
 
         mockMvc.perform(get("/api/v1/websocket/stats"))
                 .andExpect(status().isOk());
@@ -85,8 +88,7 @@ class WebSocketStatsControllerSpec {
     @Test
     @DisplayName("DOIT retourner 200 avec les détails quand la session existe")
     void shouldReturn200ForKnownSessionInfo() throws Exception {
-        SessionInfo info = buildSessionInfo("s1");
-        when(sessionManager.getSessionInfo("s1")).thenReturn(info);
+        when(sessionManager.getSessionInfo("s1")).thenReturn(buildSessionInfo("s1"));
 
         mockMvc.perform(get("/api/v1/websocket/session/s1"))
                 .andExpect(status().isOk());
@@ -112,10 +114,9 @@ class WebSocketStatsControllerSpec {
     @Test
     @DisplayName("DOIT retourner 200 avec les champs cleaned et remaining après le cleanup")
     void shouldReturn200ForCleanupWithCorrectFields() throws Exception {
-        // 5 sessions avant cleanup → 3 après (2 supprimées)
         when(sessionManager.getActiveSessionCount())
-                .thenReturn(5)   // appel avant cleanup
-                .thenReturn(3);  // appel après cleanup
+                .thenReturn(5)  // avant cleanup
+                .thenReturn(3); // après cleanup
         doNothing().when(sessionManager).cleanupInactiveSessions(anyLong());
 
         mockMvc.perform(post("/api/v1/websocket/cleanup"))
@@ -129,7 +130,7 @@ class WebSocketStatsControllerSpec {
     // =========================================================================
 
     @Test
-    @DisplayName("DOIT retourner 200 avec status UP, activeSessions et totalSessions pour le health")
+    @DisplayName("DOIT retourner 200 avec status UP, activeSessions et totalSessions")
     void shouldReturn200ForHealth() throws Exception {
         when(sessionManager.getStats()).thenReturn(buildStats(2, 8));
 
@@ -144,16 +145,18 @@ class WebSocketStatsControllerSpec {
     // Utilitaires de construction de stubs
     // =========================================================================
 
+    /**
+     * Construit un {@link SessionStats} via le constructeur complet.
+     * Signature : (totalSessions, activeSessions, totalMessages, avgMessages, avgDuration)
+     */
     private SessionStats buildStats(int active, int total) {
-        SessionStats stats = new SessionStats();
-        stats.setActiveSessions(active);
-        stats.setTotalSessions(total);
-        return stats;
+        return new SessionStats(total, active, 0L, 0.0, 0L);
     }
 
+    /**
+     * Construit un {@link SessionInfo} via le constructeur (sessionId, userId).
+     */
     private SessionInfo buildSessionInfo(String sessionId) {
-        SessionInfo info = new SessionInfo();
-        info.setSessionId(sessionId);
-        return info;
+        return new SessionInfo(sessionId, "user-test");
     }
 }

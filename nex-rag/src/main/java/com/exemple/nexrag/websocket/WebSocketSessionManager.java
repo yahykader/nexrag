@@ -1,220 +1,185 @@
 package com.exemple.nexrag.websocket;
 
-import lombok.Data;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.WebSocketSession;
 
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
+
 /**
- * Gestionnaire de sessions WebSocket
- * 
- * Features:
- * - Track active sessions
- * - Store session metadata
- * - Session lifecycle management
- * - Statistics and monitoring
+ * Gestionnaire de sessions WebSocket.
+ *
+ * Principe SRP  : unique responsabilité → gérer le cycle de vie et les
+ *                 métadonnées des sessions WebSocket.
+ * Clean code    : {@link SessionInfo} remplace {@code @Data} par {@code @Getter}
+ *                 uniquement — les setters générés par {@code @Data} sont inutiles
+ *                 sur une classe dont les champs sont mutés directement.
+ *                 {@link SessionStats} est immuable — construit via stream,
+ *                 sans le pattern {@code final long[] {0}} contournement.
+ *
+ * @author ayahyaoui
+ * @version 2.0
  */
 @Slf4j
 @Component
 public class WebSocketSessionManager {
-    
-    private final Map<String, SessionInfo> sessions = new ConcurrentHashMap<>();
-    private final Map<String, WebSocketSession> activeConnections = new ConcurrentHashMap<>();
-    
-    /**
-     * Register a new WebSocket session
-     */
+
+    private final Map<String, SessionInfo>       sessions          = new ConcurrentHashMap<>();
+    private final Map<String, WebSocketSession>  activeConnections = new ConcurrentHashMap<>();
+
+    // -------------------------------------------------------------------------
+    // API publique — cycle de vie
+    // -------------------------------------------------------------------------
+
     public void registerSession(WebSocketSession session, String userId) {
         String sessionId = session.getId();
-        
-        SessionInfo info = new SessionInfo();
-        info.sessionId = sessionId;
-        info.userId = userId;
-        info.connectionTime = System.currentTimeMillis();
-        info.lastActivity = System.currentTimeMillis();
-        info.active = true;
-        
-        sessions.put(sessionId, info);
+        sessions.put(sessionId, new SessionInfo(sessionId, userId));
         activeConnections.put(sessionId, session);
-        
-        log.info("📝 Registered WebSocket session: {} (user: {}, total: {})",
+        log.info("📝 Session enregistrée : {} (user: {}, total: {})",
             sessionId, userId, sessions.size());
     }
-    
-    /**
-     * Unregister a WebSocket session
-     */
+
     public void unregisterSession(String sessionId) {
         SessionInfo info = sessions.remove(sessionId);
         activeConnections.remove(sessionId);
-        
         if (info != null) {
-            info.active = false;
-            info.disconnectionTime = System.currentTimeMillis();
-            
-            long duration = info.disconnectionTime - info.connectionTime;
-            
-            log.info("📝 Unregistered WebSocket session: {} (duration: {}ms, total: {})",
-                sessionId, duration, sessions.size());
+            info.markDisconnected();
+            log.info("📝 Session supprimée : {} (durée: {}ms, total: {})",
+                sessionId, info.durationMs(), sessions.size());
         }
     }
-    
-    /**
-     * Update session activity
-     */
+
     public void updateActivity(String sessionId) {
         SessionInfo info = sessions.get(sessionId);
-        if (info != null) {
-            info.lastActivity = System.currentTimeMillis();
-            info.messageCount++;
-        }
+        if (info != null) info.touch();
     }
-    
-    /**
-     * Get session info
-     */
-    public SessionInfo getSessionInfo(String sessionId) {
-        return sessions.get(sessionId);
+
+    // -------------------------------------------------------------------------
+    // API publique — lecture
+    // -------------------------------------------------------------------------
+
+    public SessionInfo       getSessionInfo(String sessionId)  { return sessions.get(sessionId);          }
+    public WebSocketSession  getSession(String sessionId)      { return activeConnections.get(sessionId); }
+    public int               getActiveSessionCount()           { return activeConnections.size();         }
+    public boolean           isActive(String sessionId)        { return activeConnections.containsKey(sessionId); }
+
+    public Set<String> getActiveSessionIds() {
+        return new HashSet<>(activeConnections.keySet());
     }
-    
-    /**
-     * Get WebSocket session
-     */
-    public WebSocketSession getSession(String sessionId) {
-        return activeConnections.get(sessionId);
-    }
-    
-    /**
-     * Get all active session IDs
-     */
-    public java.util.Set<String> getActiveSessionIds() {
-        return new java.util.HashSet<>(activeConnections.keySet());
-    }
-    
-    /**
-     * Get total active sessions
-     */
-    public int getActiveSessionCount() {
-        return activeConnections.size();
-    }
-    
-    /**
-     * Set conversation ID for session
-     */
+
     public void setConversationId(String sessionId, String conversationId) {
         SessionInfo info = sessions.get(sessionId);
-        if (info != null) {
-            info.conversationId = conversationId;
-        }
+        if (info != null) info.conversationId = conversationId;
     }
-    
-    /**
-     * Get conversation ID for session
-     */
+
     public String getConversationId(String sessionId) {
         SessionInfo info = sessions.get(sessionId);
         return info != null ? info.conversationId : null;
     }
-    
-    /**
-     * Check if session is active
-     */
-    public boolean isActive(String sessionId) {
-        return activeConnections.containsKey(sessionId);
-    }
-    
-    /**
-     * Get session statistics
-     */
+
+    // -------------------------------------------------------------------------
+    // Statistiques
+    // -------------------------------------------------------------------------
+
     public SessionStats getStats() {
-        SessionStats stats = new SessionStats();
-        stats.totalSessions = sessions.size();
-        stats.activeSessions = activeConnections.size();
-        
-        // ✅ Utiliser AtomicLong pour être compatible avec lambda
-        final long[] totalMessages = {0};
-        final long[] totalDuration = {0};
-        
-        sessions.values().forEach(info -> {
-            totalMessages[0] += info.messageCount;
-            
-            if (info.active) {
-                long duration = System.currentTimeMillis() - info.connectionTime;
-                totalDuration[0] += duration;
-            } else if (info.disconnectionTime > 0) {
-                long duration = info.disconnectionTime - info.connectionTime;
-                totalDuration[0] += duration;
-            }
-        });
-        
-        stats.totalMessages = totalMessages[0];
-        stats.avgConnectionDuration = totalDuration[0];
-        
-        if (stats.totalSessions > 0) {
-            stats.avgConnectionDuration /= stats.totalSessions;
-            stats.avgMessagesPerSession = (double) stats.totalMessages / stats.totalSessions;
-        }
-        
-        return stats;
+        int    total         = sessions.size();
+        int    active        = activeConnections.size();
+        long   totalMessages = sessions.values().stream().mapToLong(s -> s.messageCount).sum();
+        long   totalDuration = sessions.values().stream().mapToLong(SessionInfo::durationMs).sum();
+        double avgMessages   = total > 0 ? (double) totalMessages / total : 0.0;
+        long   avgDuration   = total > 0 ? totalDuration / total : 0L;
+
+        return new SessionStats(total, active, totalMessages, avgMessages, avgDuration);
     }
-    
-    /**
-     * Clean up inactive sessions (call periodically)
-     */
+
+    // -------------------------------------------------------------------------
+    // Nettoyage
+    // -------------------------------------------------------------------------
+
     public void cleanupInactiveSessions(long inactiveThresholdMs) {
-        long now = System.currentTimeMillis();
-        
-        // ✅ CORRECTION: Utiliser AtomicInteger au lieu de int
-        final AtomicInteger cleaned = new AtomicInteger(0);
-        
+        long now     = System.currentTimeMillis();
+        long before  = sessions.size();
+
         sessions.entrySet().removeIf(entry -> {
             SessionInfo info = entry.getValue();
-            if (!info.active && info.disconnectionTime > 0) {
-                long inactiveDuration = now - info.disconnectionTime;
-                if (inactiveDuration > inactiveThresholdMs) {
-                    cleaned.incrementAndGet(); // ✅ Utiliser incrementAndGet()
-                    return true;
-                }
-            }
-            return false;
+            return !info.active
+                && info.disconnectionTime > 0
+                && (now - info.disconnectionTime) > inactiveThresholdMs;
         });
-        
-        if (cleaned.get() > 0) {
-            log.info("🧹 Cleaned up {} inactive sessions", cleaned.get());
+
+        long cleaned = before - sessions.size();
+        if (cleaned > 0) log.info("🧹 {} sessions inactives supprimées", cleaned);
+    }
+
+    // -------------------------------------------------------------------------
+    // Modèles internes
+    // -------------------------------------------------------------------------
+
+    /**
+     * Métadonnées d'une session WebSocket.
+     *
+     * Clean code : {@code @Getter} uniquement — pas de setters générés
+     *              inutilement par {@code @Data}.
+     */
+    @Getter
+    public static class SessionInfo {
+        private final String sessionId;
+        private final String userId;
+        private final long   connectionTime;
+        String  conversationId;
+        long    lastActivity;
+        long    disconnectionTime;
+        boolean active        = true;
+        int     messageCount  = 0;
+
+        public SessionInfo(String sessionId, String userId) {
+            this.sessionId      = sessionId;
+            this.userId         = userId;
+            this.connectionTime = System.currentTimeMillis();
+            this.lastActivity   = this.connectionTime;
+        }
+
+        void touch() {
+            lastActivity = System.currentTimeMillis();
+            messageCount++;
+        }
+
+        void markDisconnected() {
+            active           = false;
+            disconnectionTime = System.currentTimeMillis();
+        }
+
+        long durationMs() {
+            long end = active ? System.currentTimeMillis() : disconnectionTime;
+            return end - connectionTime;
         }
     }
-    
-    // ========================================================================
-    // DATA CLASSES
-    // ========================================================================
-    
+
     /**
-     * Information about a WebSocket session
+     * Statistiques immuables des sessions WebSocket.
+     *
+     * Clean code : record-like — construit une seule fois via {@link #getStats()},
+     *              pas de setters. Remplace le pattern {@code @Data} mutable.
      */
-    @Data
-    public static class SessionInfo {
-        private String sessionId;
-        private String userId;
-        private String conversationId;
-        private long connectionTime;
-        private long lastActivity;
-        private long disconnectionTime;
-        private boolean active;
-        private int messageCount;
-    }
-    
-    /**
-     * Session statistics
-     */
-    @Data
+    @Getter
     public static class SessionStats {
-        private int totalSessions;
-        private int activeSessions;
-        private long totalMessages;
-        private double avgMessagesPerSession;
-        private long avgConnectionDuration;
+        private final int    totalSessions;
+        private final int    activeSessions;
+        private final long   totalMessages;
+        private final double avgMessagesPerSession;
+        private final long   avgConnectionDuration;
+
+        public SessionStats(int total, int active, long totalMessages,
+                     double avgMessages, long avgDuration) {
+            this.totalSessions         = total;
+            this.activeSessions        = active;
+            this.totalMessages         = totalMessages;
+            this.avgMessagesPerSession = avgMessages;
+            this.avgConnectionDuration = avgDuration;
+        }
     }
 }

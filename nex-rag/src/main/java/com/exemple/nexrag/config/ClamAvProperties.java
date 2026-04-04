@@ -36,7 +36,7 @@ import jakarta.validation.constraints.Positive;
  *     interval: 120000
  * </pre>
  *
- * @author RAG Team
+ * @author ayahyaoui
  * @version 2.0
  */
 @Getter

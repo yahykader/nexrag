@@ -50,26 +50,34 @@ public class AntivirusGuard {
      * @throws AntivirusScanException  si le scan échoue techniquement
      * @throws IOException             si la lecture des bytes échoue
      */
-    public void assertClean(MultipartFile file) throws IOException, AntivirusScanException {
+    public void assertClean(MultipartFile file) throws IOException {
         if (!enabled) {
-            log.debug("🔓 Scan antivirus désactivé — fichier accepté : {}", file.getOriginalFilename());
-            return;
-        }
+                log.debug("🔓 Antivirus désactivé : {}", file.getOriginalFilename());
+                return;
+            }
 
-        String filename = file.getOriginalFilename();
-        log.debug("🦠 Scan antivirus : {}", filename);
+            String filename = file.getOriginalFilename();
+            log.debug("🦠 Scan antivirus : {}", filename);
 
-        // Scan en mémoire — pas de fichier temporaire nécessaire
-        ScanResult result = antivirusScanner.scanBytes(file.getBytes(), filename);
+            try {
+                ScanResult result = antivirusScanner.scanBytes(file.getBytes(), filename);
 
-        if (result.isClean()) {
-            log.debug("✅ Fichier sain : {}", filename);
-            return;
-        }
+                if (!result.isClean()) {
+                    log.error("🚨 Virus détecté : {} — {}", filename, result.getVirusName());
+                    ragMetrics.recordVirusDetected(result.getVirusName());
+                    throw new VirusDetectedException("Virus détecté : " + result.getVirusName());
+                }
 
-        log.error("🚨 Virus détecté : {} — {}", filename, result.getVirusName());
-        ragMetrics.recordVirusDetected(result.getVirusName());
+                log.debug("✅ Fichier sain : {}", filename);
 
-        throw new VirusDetectedException("Virus détecté : " + result.getVirusName());
+            } catch (VirusDetectedException e) {
+                throw e; // ← toujours propager les vrais virus détectés
+
+            } catch (AntivirusScanException e) {
+                // ✅ Fail-open : timeout ou erreur technique ClamAV
+                // → autoriser le fichier plutôt que bloquer toute l'ingestion
+                log.warn("⚠️ [Antivirus] Scan échoué pour {} — fichier autorisé (fail-open) : {}",
+                    filename, e.getMessage());
+            }
     }
 }

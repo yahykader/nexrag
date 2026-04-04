@@ -1,9 +1,9 @@
 package com.exemple.nexrag.service.rag.facade;
 
 import com.exemple.nexrag.dto.*;
+import com.exemple.nexrag.exception.VirusDetectedException;
 import com.exemple.nexrag.exception.ResourceNotFoundException;
 import com.exemple.nexrag.constant.FileSizeConstants;
-import com.exemple.nexrag.dto.*;
 import com.exemple.nexrag.validation.FileValidator;
 import com.exemple.nexrag.exception.DuplicateFileException;
 import com.exemple.nexrag.service.rag.ingestion.IngestionOrchestrator;
@@ -364,8 +364,10 @@ public class IngestionFacadeImpl implements IngestionFacade {
         try {
             return supplier.get();
         } catch (DuplicateFileException e) {
-            // Laisse remonter telle quelle — gérée par IngestionExceptionHandler
             throw e;
+        } catch (VirusDetectedException e) {
+            // ✅ Wrapper en IllegalStateException — contrat attendu par les consommateurs
+            throw new IllegalStateException(e.getMessage(), e);
         } catch (RuntimeException e) {
             throw e;
         } catch (Exception e) {

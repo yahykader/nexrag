@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Validateur de fichiers entrants.
@@ -14,6 +15,10 @@ import java.util.List;
  */
 @Component
 public class FileValidator {
+
+    private static final Set<String> BLOCKED_EXTENSIONS = Set.of(
+        "exe", "bat", "cmd", "msi", "com", "scr", "vbs", "ps1", "sh"
+    );
 
     /**
      * Valide un fichier unique.
@@ -34,6 +39,14 @@ public class FileValidator {
                 FileSizeConstants.MAX_FILE_SIZE_MB
             ));
         }
+
+        String extension = getExtension(file.getOriginalFilename());
+        if (BLOCKED_EXTENSIONS.contains(extension.toLowerCase())) {
+            throw new IllegalArgumentException(
+                "Impossible d'uploader ce fichier — le type ."
+                + extension + " n'est pas autorisé"
+            );
+        }
     }
 
     /**
@@ -46,5 +59,14 @@ public class FileValidator {
             throw new IllegalArgumentException("Aucun fichier fourni");
         }
         files.forEach(this::validate);
+    }
+
+    // -------------------------------------------------------------------------
+    // Privé
+    // -------------------------------------------------------------------------
+
+    private String getExtension(String filename) {
+        if (filename == null || !filename.contains(".")) return "";
+        return filename.substring(filename.lastIndexOf('.') + 1);
     }
 }

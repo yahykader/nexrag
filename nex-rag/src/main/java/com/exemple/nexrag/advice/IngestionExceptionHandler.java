@@ -1,5 +1,6 @@
 package com.exemple.nexrag.advice;
 
+import com.exemple.nexrag.exception.AntivirusScanException;
 import com.exemple.nexrag.service.rag.controller.MultimodalIngestionController;
 import com.exemple.nexrag.dto.ErrorResponse;
 import com.exemple.nexrag.dto.IngestionResponse;
@@ -42,6 +43,17 @@ public class IngestionExceptionHandler {
         log.warn("⚠️ Paramètre multipart manquant : {}", e.getRequestPartName());
         return ResponseEntity.badRequest()
             .body(new ErrorResponse("Paramètre manquant : " + e.getRequestPartName()));
+    }
+
+    @ExceptionHandler(AntivirusScanException.class)
+    public ResponseEntity<IngestionResponse> handleAntivirusScan(AntivirusScanException e) {
+        log.error("⚠️ Erreur scan antivirus : {}", e.getMessage());
+        return ResponseEntity
+            .status(HttpStatus.SERVICE_UNAVAILABLE)
+            .body(IngestionResponse.builder()
+                .success(false)
+                .message("Le service antivirus est temporairement indisponible. Réessayez dans quelques instants.")
+                .build());
     }
 
     @ExceptionHandler(IllegalArgumentException.class)

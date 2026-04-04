@@ -11,6 +11,14 @@ server:
     include-message: always
     include-stacktrace: always
 
+websocket:
+  allowed-origins:
+    - "http://localhost"
+    - "http://localhost:4200"
+    - "https://*"
+  inactive-threshold-ms: 3600000
+  cleanup-interval-ms: 3600000
+  stats-interval-ms: 300000
 # ============================================================================
 # APPLICATION
 # ============================================================================
@@ -200,7 +208,7 @@ rate-limit:
     requests-per-minute: 20      # Suppression
   search:
     requests-per-minute: 50      # Recherche
-  default:
+  default-endpoint:
     requests-per-minute: 30      # Autres endpoints
 
 # ============================================================================

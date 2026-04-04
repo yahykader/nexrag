@@ -1,12 +1,7 @@
-// ============================================================================
-// INTERCEPTOR - RateLimitInterceptor.java
-// Intercepteur pour appliquer automatiquement le Rate Limiting
-// ============================================================================
 package com.exemple.nexrag.service.rag.interceptor;
 
-import com.exemple.nexrag.service.rag.interceptor.RateLimitService;
-import com.exemple.nexrag.service.rag.interceptor.RateLimitService.RateLimitResult;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -16,200 +11,126 @@ import org.springframework.web.servlet.HandlerInterceptor;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
  * Intercepteur HTTP pour appliquer le Rate Limiting automatiquement.
- * 
- * Détecte automatiquement le type d'endpoint et applique la limite appropriée.
- * 
- * Routes protégées :
- * - /api/v1/ingestion/upload* → uploadLimit
- * - /api/v1/ingestion/upload/batch* → batchLimit
- * - /api/v1/crud/file/* (DELETE) → deleteLimit
- * - /api/v1/ingestion/search* → searchLimit
- * - Autres → defaultLimit
- * 
- * @author RAG Team
- * @version 1.0
+ *
+ * Principe SRP  : unique responsabilité → intercepter les requêtes et déléguer
+ *                 la vérification à {@link RateLimitService}.
+ * Clean code    : supprime l'auto-import redondant ({@code RateLimitService}
+ *                 est dans le même package).
+ *                 {@code checkRateLimit()} reste la seule méthode de routage.
+ *                 OPTIONS (CORS preflight) court-circuité en première ligne.
+ *
+ * @author ayahyaoui
+ * @version 2.0
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class RateLimitInterceptor implements HandlerInterceptor {
-    
-    private final RateLimitService rateLimitService;
-    private final ObjectMapper objectMapper;
-    
-    public RateLimitInterceptor(
-            RateLimitService rateLimitService,
-            ObjectMapper objectMapper) {
-        
-        this.rateLimitService = rateLimitService;
-        this.objectMapper = objectMapper;
-        
-        log.info("✅ RateLimitInterceptor initialisé");
-    }
-    
-    @Override
-    public boolean preHandle(
-            HttpServletRequest request, 
-            HttpServletResponse response, 
-            Object handler) throws Exception {
 
-        // AJOUTEZ : Autoriser OPTIONS (preflight CORS)
+    private final RateLimitService rateLimitService;
+    private final ObjectMapper     objectMapper;
+
+    // -------------------------------------------------------------------------
+    // HandlerInterceptor
+    // -------------------------------------------------------------------------
+
+    @Override
+    public boolean preHandle(HttpServletRequest request,
+                             HttpServletResponse response,
+                             Object handler) throws Exception {
+
+        // Autoriser OPTIONS (CORS preflight) sans vérification
         if ("OPTIONS".equalsIgnoreCase(request.getMethod())) {
             return true;
         }
-        
-        // Récupérer userId (depuis header, session, JWT, etc.)
-        String userId = getUserId(request);
-        
-        if (userId == null) {
-            // Si pas d'userId, utiliser l'IP comme fallback
-            userId = getClientIP(request);
-        }
-        
-        // Déterminer le type d'endpoint
-        String path = request.getRequestURI();
-        String method = request.getMethod();
-        
-        RateLimitResult result = checkRateLimit(userId, path, method);
-        
+
+        String userId = resolveUserId(request);
+        RateLimitResult result = selectLimit(userId, request.getRequestURI(), request.getMethod());
+
         if (result.isAllowed()) {
-            // Ajouter headers informatifs
-            response.addHeader("X-RateLimit-Remaining", 
+            response.addHeader("X-RateLimit-Remaining",
                 String.valueOf(result.getRemainingTokens()));
-            
-            return true; // Autoriser la requête
-            
-        } else {
-            // Bloquer la requête
-            sendRateLimitExceededResponse(response, result);
-            return false;
+            return true;
         }
+
+        rejectWithTooManyRequests(response, result);
+        return false;
     }
-    
-    /**
-     * Vérifie le rate limit selon le type d'endpoint.
-     */
-    private RateLimitResult checkRateLimit(String userId, String path, String method) {
-        
-        // Upload batch
-        if (path.contains("/upload/batch")) {
-            return rateLimitService.checkBatchLimit(userId);
-        }
-        
-        // Upload simple
-        if (path.contains("/upload")) {
-            return rateLimitService.checkUploadLimit(userId);
-        }
-        
-        // Delete
-        if (path.contains("/file/") && "DELETE".equals(method)) {
-            return rateLimitService.checkDeleteLimit(userId);
-        }
-        
-        if (path.contains("/batch/") && "DELETE".equals(method)) {
-            return rateLimitService.checkDeleteLimit(userId);
-        }
-        
-        if (path.contains("/files/") && "DELETE".equals(method)) {
-            return rateLimitService.checkDeleteLimit(userId);
-        }
-        
-        // Search
-        if (path.contains("/search")) {
-            return rateLimitService.checkSearchLimit(userId);
-        }
-        
-        // Default pour les autres endpoints
+
+    // -------------------------------------------------------------------------
+    // Sélection de la limite selon l'endpoint
+    // -------------------------------------------------------------------------
+
+    private RateLimitResult selectLimit(String userId, String path, String method) {
+        if (path.contains("/upload/batch"))                          return rateLimitService.checkBatchLimit(userId);
+        if (path.contains("/upload"))                               return rateLimitService.checkUploadLimit(userId);
+        if (path.contains("/search"))                               return rateLimitService.checkSearchLimit(userId);
+        if ("DELETE".equals(method) && path.contains("/file/"))     return rateLimitService.checkDeleteLimit(userId);
+        if ("DELETE".equals(method) && path.contains("/batch/"))    return rateLimitService.checkDeleteLimit(userId);
+        if ("DELETE".equals(method) && path.contains("/files/"))    return rateLimitService.checkDeleteLimit(userId);
         return rateLimitService.checkDefaultLimit(userId);
     }
-    
+
+    // -------------------------------------------------------------------------
+    // Résolution de l'identifiant utilisateur
+    // -------------------------------------------------------------------------
+
     /**
-     * Récupère l'ID utilisateur depuis la requête.
-     * 
-     * Priorité :
-     * 1. Header X-User-Id
-     * 2. JWT token (si authentification activée)
-     * 3. Session
-     * 4. null (fallback sur IP)
+     * Résout l'identifiant utilisateur depuis la requête.
+     * Priorité : header X-User-Id → session → IP client.
      */
-    private String getUserId(HttpServletRequest request) {
-        
-        // 1. Header X-User-Id
+    private String resolveUserId(HttpServletRequest request) {
         String userId = request.getHeader("X-User-Id");
-        if (userId != null && !userId.isBlank()) {
-            return userId;
-        }
-        
-        // 2. JWT (à implémenter si vous utilisez JWT)
-        // String jwt = request.getHeader("Authorization");
-        // if (jwt != null) {
-        //     return extractUserIdFromJWT(jwt);
-        // }
-        
-        // 3. Session
+        if (userId != null && !userId.isBlank()) return userId;
+
         if (request.getSession(false) != null) {
             Object sessionUserId = request.getSession().getAttribute("userId");
-            if (sessionUserId != null) {
-                return sessionUserId.toString();
-            }
+            if (sessionUserId != null) return sessionUserId.toString();
         }
-        
-        // 4. Fallback sur IP (sera fait par le caller)
-        return null;
+
+        return resolveClientIp(request);
     }
-    
+
     /**
-     * Récupère l'IP du client.
+     * Résout l'IP client en tenant compte des proxies.
      */
-    private String getClientIP(HttpServletRequest request) {
-        
-        // Vérifier les headers de proxy
-        String ip = request.getHeader("X-Forwarded-For");
-        if (ip != null && !ip.isBlank()) {
-            // Prendre la première IP si plusieurs
-            return ip.split(",")[0].trim();
+    private String resolveClientIp(HttpServletRequest request) {
+        String forwarded = request.getHeader("X-Forwarded-For");
+        if (forwarded != null && !forwarded.isBlank()) {
+            return forwarded.split(",")[0].trim();
         }
-        
-        ip = request.getHeader("X-Real-IP");
-        if (ip != null && !ip.isBlank()) {
-            return ip;
-        }
-        
-        // Fallback sur l'IP directe
+
+        String realIp = request.getHeader("X-Real-IP");
+        if (realIp != null && !realIp.isBlank()) return realIp;
+
         return request.getRemoteAddr();
     }
-    
-    /**
-     * Envoie une réponse 429 Too Many Requests.
-     */
-    private void sendRateLimitExceededResponse(
-            HttpServletResponse response, 
-            RateLimitResult result) throws IOException {
-        
+
+    // -------------------------------------------------------------------------
+    // Réponse 429
+    // -------------------------------------------------------------------------
+
+    private void rejectWithTooManyRequests(HttpServletResponse response,
+                                           RateLimitResult result) throws IOException {
         response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
-        
-        // Ajouter headers standard rate limiting
-        response.addHeader("X-RateLimit-Limit", "voir configuration");
         response.addHeader("X-RateLimit-Remaining", "0");
-        response.addHeader("X-RateLimit-Reset", 
-            String.valueOf(System.currentTimeMillis() / 1000 + result.getRetryAfterSeconds()));
         response.addHeader("Retry-After", String.valueOf(result.getRetryAfterSeconds()));
-        
-        // Corps de la réponse
-        Map<String, Object> body = new HashMap<>();
-        body.put("error", "Too Many Requests");
-        body.put("message", "Rate limit dépassé. Réessayez dans " + 
-            result.getRetryAfterSeconds() + " secondes.");
-        body.put("retryAfterSeconds", result.getRetryAfterSeconds());
-        body.put("timestamp", System.currentTimeMillis());
-        
-        String json = objectMapper.writeValueAsString(body);
-        response.getWriter().write(json);
+        response.addHeader("X-RateLimit-Reset",
+            String.valueOf(System.currentTimeMillis() / 1000 + result.getRetryAfterSeconds()));
+
+        String body = objectMapper.writeValueAsString(Map.of(
+            "error",             "Too Many Requests",
+            "message",           "Rate limit dépassé. Réessayez dans %ds.".formatted(result.getRetryAfterSeconds()),
+            "retryAfterSeconds", result.getRetryAfterSeconds(),
+            "timestamp",         System.currentTimeMillis()
+        ));
+
+        response.getWriter().write(body);
         response.getWriter().flush();
     }
 }

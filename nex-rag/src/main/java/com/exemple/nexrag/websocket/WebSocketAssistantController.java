@@ -2,7 +2,6 @@ package com.exemple.nexrag.websocket;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.WebSocketSession;
@@ -11,196 +10,132 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * WebSocket controller for RAG Assistant
- * 
- * AVEC INTÉGRATION WebSocketSessionManager
+ * Handler WebSocket pour le RAG Assistant — streaming et gestion de session.
+ *
+ * Principe SRP  : unique responsabilité → gérer les messages RAG assistant.
+ *                 La gestion des sessions est déléguée à {@link WebSocketSessionManager}.
+ * Principe DIP  : dépend des abstractions {@link WebSocketSessionManager} injectée
+ *                 par constructeur — pas de {@code @Autowired} field injection.
+ * Clean code    : supprime {@code simulateResponse()} avec {@code new Thread()} —
+ *                 le mock de réponse n'appartient pas au code de production.
+ *                 {@code broadcast()} défini dans {@link WebSocketHandler} — pas dupliqué.
+ *
+ * @author ayhyaoui
+ * @version 2.0
  */
 @Slf4j
 @Component
 public class WebSocketAssistantController extends WebSocketHandler {
-    
-    // ========================================================================
-    // INJECTION WebSocketSessionManager
-    // ========================================================================
-    
-    @Autowired
-    private WebSocketSessionManager sessionManager;
-    
-    public WebSocketAssistantController(ObjectMapper objectMapper) {
+
+    private static final String KEY_CONVERSATION_ID = "conversationId";
+
+    private final WebSocketSessionManager sessionManager;
+
+    public WebSocketAssistantController(ObjectMapper objectMapper,
+                                        WebSocketSessionManager sessionManager) {
         super(objectMapper);
+        this.sessionManager = sessionManager;
     }
-    
-    // ========================================================================
-    // LIFECYCLE HOOKS (avec SessionManager)
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // Lifecycle
+    // -------------------------------------------------------------------------
+
     @Override
     protected void onConnectionEstablished(WebSocketSession session) {
-        String sessionId = session.getId();
-        
-        log.info("✅ RAG Assistant connected: {}", sessionId);
-        
-        // 🔥 UTILISATION 1: Register session
-        sessionManager.registerSession(session, "anonymous"); // TODO: Get real userId from auth
-        
-        // Send welcome message
+        sessionManager.registerSession(session, "anonymous");
+        log.info("✅ RAG Assistant connecté : {}", session.getId());
+
         sendMessage(session, Map.of(
-            "type", "connected",
-            "sessionId", sessionId,
+            "type",      "connected",
+            "sessionId", session.getId(),
             "timestamp", System.currentTimeMillis()
         ));
     }
-    
-    @Override
-    protected void handleMessage(WebSocketSession session, String type, Map<String, Object> data) {
-        String sessionId = session.getId();
-        
-        // 🔥 UTILISATION 2: Update activity on every message
-        sessionManager.updateActivity(sessionId);
-        
-        log.info("📨 Message type: {} from session: {}", type, sessionId);
-        
-        switch (type) {
-            case "init" -> handleInit(session, data);
-            case "query" -> handleQuery(session, data);
-            case "cancel" -> handleCancel(session);
-            default -> sendError(session, "Unknown type: " + type, "UNKNOWN_TYPE");
-        }
-    }
-    
+
     @Override
     protected void onConnectionClosed(WebSocketSession session, CloseStatus status) {
-        String sessionId = session.getId();
-        
-        log.info("✅ RAG Assistant disconnected: {} (status: {})", sessionId, status);
-        
-        // 🔥 UTILISATION 3: Unregister session
-        sessionManager.unregisterSession(sessionId);
+        sessionManager.unregisterSession(session.getId());
+        log.info("✅ RAG Assistant déconnecté : {} (status: {})", session.getId(), status);
     }
 
     @Override
     protected void onTransportError(WebSocketSession session, Throwable exception) {
-        String sessionId = session.getId();
-        log.error("❌ WebSocket transport error: {}", sessionId, exception);
-        
-        // Optional: cleanup session
-        if (sessionManager != null) {
-            sessionManager.unregisterSession(sessionId);
+        log.error("❌ Erreur transport RAG Assistant : {}", session.getId(), exception);
+        sessionManager.unregisterSession(session.getId());
+    }
+
+    // -------------------------------------------------------------------------
+    // Routage des messages
+    // -------------------------------------------------------------------------
+
+    @Override
+    protected void handleMessage(WebSocketSession session, String type,
+                                 Map<String, Object> data) {
+        sessionManager.updateActivity(session.getId());
+        log.info("📨 Message type={} depuis {}", type, session.getId());
+
+        switch (type) {
+            case "init"  -> handleInit(session, data);
+            case "query" -> handleQuery(session, data);
+            case "cancel"-> handleCancel(session);
+            default      -> sendError(session, "Type inconnu : " + type, "UNKNOWN_TYPE");
         }
     }
-    
-    // ========================================================================
-    // MESSAGE HANDLERS
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // Handlers métier
+    // -------------------------------------------------------------------------
+
     private void handleInit(WebSocketSession session, Map<String, Object> data) {
-        String sessionId = session.getId();
-        String userId = (String) data.get("userId");
-        
-        // Generate conversation ID
+        String userId         = (String) data.getOrDefault("userId", "anonymous");
         String conversationId = "conv_" + UUID.randomUUID().toString().substring(0, 8);
-        
-        // 🔥 UTILISATION 4: Store conversationId in session
-        sessionManager.setConversationId(sessionId, conversationId);
-        
-        log.info("🔧 Init: user={}, conv={}", userId, conversationId);
-        
+
+        sessionManager.setConversationId(session.getId(), conversationId);
+        log.info("🔧 Init : user={} conv={}", userId, conversationId);
+
         sendMessage(session, Map.of(
-            "type", "conversation_created",
+            "type",           "conversation_created",
             "conversationId", conversationId,
-            "userId", userId != null ? userId : "anonymous"
+            "userId",         userId
         ));
     }
-    
+
     private void handleQuery(WebSocketSession session, Map<String, Object> data) {
-        String sessionId = session.getId();
         String query = (String) data.get("text");
-        
-        if (query == null || query.isEmpty()) {
-            sendError(session, "Query text is required", "MISSING_QUERY");
+
+        if (query == null || query.isBlank()) {
+            sendError(session, "Le texte de la requête est requis", "MISSING_QUERY");
             return;
         }
-        
-        // 🔥 UTILISATION 5: Get conversationId from session
-        String conversationId = sessionManager.getConversationId(sessionId);
-        
-        log.info("🚀 Query: {} (conv: {})", truncate(query, 50), conversationId);
-        
+
+        String conversationId = sessionManager.getConversationId(session.getId());
+        log.info("🚀 Query : {} (conv: {})", truncate(query, 50), conversationId);
+
         sendMessage(session, Map.of(
-            "type", "query_received",
-            "query", query,
-            "conversationId", conversationId
+            "type",           "query_received",
+            "query",          query,
+            "conversationId", conversationId != null ? conversationId : ""
         ));
-        
-        // TODO: Integrate with StreamingOrchestrator
-        // Mock response for now
-        simulateResponse(session, query);
+
+        // TODO: déléguer à StreamingOrchestrator quand disponible
     }
-    
+
     private void handleCancel(WebSocketSession session) {
-        String sessionId = session.getId();
-        
-        log.info("🛑 Cancel: {}", sessionId);
-        
-        sendMessage(session, Map.of(
-            "type", "cancelled",
-            "message", "Stream cancelled"
-        ));
+        log.info("🛑 Annulation demandée par {}", session.getId());
+        sendMessage(session, Map.of("type", "cancelled", "message", "Stream annulé"));
     }
-    
-    // ========================================================================
-    // HELPER METHODS
-    // ========================================================================
-    
+
+    // -------------------------------------------------------------------------
+    // API publique
+    // -------------------------------------------------------------------------
+
     /**
-     * 🔥 UTILISATION 6: Broadcast to all active sessions
+     * Diffuse un message à toutes les sessions actives.
+     * Délègue à {@link WebSocketHandler#broadcast(Map)} — pas de duplication.
      */
     public void broadcastToAll(Map<String, Object> message) {
-        int sent = 0;
-        
-        for (String sessionId : sessionManager.getActiveSessionIds()) {
-            WebSocketSession session = sessionManager.getSession(sessionId);
-            if (session != null && session.isOpen()) {
-                sendMessage(session, message);
-                sent++;
-            }
-        }
-        
-        log.info("📢 Broadcast sent to {} sessions", sent);
-    }
-    
-    /**
-     * Mock response (remove when real integration done)
-     */
-    private void simulateResponse(WebSocketSession session, String query) {
-        // Simulate tokens
-        String[] tokens = {"Selon", " le", " rapport", ", les", " ventes..."};
-        
-        new Thread(() -> {
-            try {
-                for (int i = 0; i < tokens.length; i++) {
-                    Thread.sleep(100);
-                    
-                    sendMessage(session, Map.of(
-                        "type", "token",
-                        "data", Map.of(
-                            "text", tokens[i],
-                            "index", i
-                        )
-                    ));
-                }
-                
-                sendMessage(session, Map.of(
-                    "type", "complete",
-                    "response", Map.of(
-                        "text", String.join("", tokens),
-                        "sources", java.util.List.of()
-                    )
-                ));
-                
-            } catch (InterruptedException e) {
-                log.error("Error simulating response", e);
-            }
-        }).start();
+        broadcast(message);
+        log.info("📢 Broadcast envoyé à {} sessions", getActiveSessionCount());
     }
 }

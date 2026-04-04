@@ -1,16 +1,16 @@
-// ============================================================================
-// CONFIG - RateLimitConfig.java
-// Configuration du Rate Limiting avec Bucket4j + Redis
-// ============================================================================
 package com.exemple.nexrag.config;
 
 import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.Bucket;
 import io.github.bucket4j.BucketConfiguration;
+import io.github.bucket4j.distributed.ExpirationAfterWriteStrategy;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 import io.github.bucket4j.redis.lettuce.cas.LettuceBasedProxyManager;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
+import io.lettuce.core.codec.ByteArrayCodec;
+import io.lettuce.core.codec.RedisCodec;
+import io.lettuce.core.codec.StringCodec;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -20,145 +20,102 @@ import java.time.Duration;
 import java.util.function.Supplier;
 
 /**
- * Configuration du Rate Limiting pour l'API d'ingestion.
- * 
- * Utilise Bucket4j (Token Bucket Algorithm) avec Redis pour le stockage distribué.
- * 
- * Limites configurables par endpoint :
- * - Upload fichier : 10 req/min par utilisateur
- * - Batch upload : 5 req/min par utilisateur
- * - Delete : 20 req/min par utilisateur
- * - Recherche : 50 req/min par utilisateur
- * 
+ * Configuration du Rate Limiting avec Bucket4j + Redis.
+ *
+ * Principe SRP  : chaque méthode configure un seul bean.
+ * Principe DIP  : dépend de {@link RateLimitProperties} pour les quotas.
+ *                 Redis lu depuis {@code spring.redis.*} — pas de duplication
+ *                 de la configuration Redis déjà présente dans
+ *                 {@code application.yml}.
+ * Clean code    : {@code redisConnection()} et {@code bucketConfig()} extraits
+ *                 — chaque méthode privée fait une seule chose.
+ *
+ * @author ayahyaoui
+ * @version 2.0
  */
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 public class RateLimitConfig {
-    
+
+    private final RateLimitProperties props;
+
+    // Redis — réutilise spring.redis.* défini dans application.yml
     @Value("${spring.redis.host:localhost}")
     private String redisHost;
-    
+
     @Value("${spring.redis.port:6379}")
     private int redisPort;
 
-    @Value("${spring.redis.password:}") 
-    String redisPassword;
-    
-    // Limites par endpoint (requêtes par minute)
-    @Value("${rate-limit.upload.requests-per-minute:10}")
-    private int uploadLimit;
-    
-    @Value("${rate-limit.batch.requests-per-minute:5}")
-    private int batchLimit;
-    
-    @Value("${rate-limit.delete.requests-per-minute:20}")
-    private int deleteLimit;
-    
-    @Value("${rate-limit.search.requests-per-minute:50}")
-    private int searchLimit;
-    
-    @Value("${rate-limit.default.requests-per-minute:30}")
-    private int defaultLimit;
-    
-    /**
-     * Configuration du ProxyManager Redis pour Bucket4j.
-     * Permet le partage des buckets entre plusieurs instances de l'application.
-     */
+    @Value("${spring.redis.password:}")
+    private String redisPassword;
+
+    // -------------------------------------------------------------------------
+    // ProxyManager Redis
+    // -------------------------------------------------------------------------
+
     @Bean
     public ProxyManager<String> proxyManager() {
-        try {
-            // Connexion Redis avec authentification
-            String redisUri;
-            if (redisPassword != null && !redisPassword.isEmpty()) {
-                redisUri = String.format("redis://:%s@%s:%d", redisPassword, redisHost, redisPort);
-            } else {
-                redisUri = String.format("redis://%s:%d", redisHost, redisPort);
-            }
+        StatefulRedisConnection<String, byte[]> connection = redisConnection();
 
+        ProxyManager<String> manager = LettuceBasedProxyManager.builderFor(connection)
+            .withExpirationStrategy(
+                ExpirationAfterWriteStrategy
+                    .basedOnTimeForRefillingBucketUpToMax(Duration.ofHours(1))
+            )
+            .build();
 
-            RedisClient redisClient = RedisClient.create(redisUri);
-            
-            // ✅ CORRECTION : Utiliser RedisCodec.of() pour combiner StringCodec + ByteArrayCodec
-            io.lettuce.core.codec.RedisCodec<String, byte[]> codec = 
-                io.lettuce.core.codec.RedisCodec.of(
-                    io.lettuce.core.codec.StringCodec.UTF8,
-                    io.lettuce.core.codec.ByteArrayCodec.INSTANCE
-                );
-            
-            StatefulRedisConnection<String, byte[]> connection = redisClient.connect(codec);
-            
-            // ProxyManager Bucket4j
-            ProxyManager<String> proxyManager = LettuceBasedProxyManager.builderFor(connection)
-                .withExpirationStrategy(
-                    // Les buckets expirent après 1 heure d'inactivité
-                    io.github.bucket4j.distributed.ExpirationAfterWriteStrategy
-                        .basedOnTimeForRefillingBucketUpToMax(Duration.ofHours(1))
-                )
-                .build();
-            
-            log.info("✅ Rate Limiting activé (Redis: {}:{})", redisHost, redisPort);
-            log.info("📊 Limites configurées:");
-            log.info("   • Upload: {} req/min", uploadLimit);
-            log.info("   • Batch: {} req/min", batchLimit);
-            log.info("   • Delete: {} req/min", deleteLimit);
-            log.info("   • Search: {} req/min", searchLimit);
-            log.info("   • Default: {} req/min", defaultLimit);
-            
-            return proxyManager;
-            
-        } catch (Exception e) {
-            log.error("❌ Erreur initialisation Rate Limiting", e);
-            throw new RuntimeException("Erreur Rate Limiting", e);
-        }
+        log.info("✅ Rate Limiting activé (Redis: {}:{})", redisHost, redisPort);
+        log.info("📊 Limites — upload={} batch={} delete={} search={} default={}",
+            props.getUpload().getRequestsPerMinute(),
+            props.getBatch().getRequestsPerMinute(),
+            props.getDelete().getRequestsPerMinute(),
+            props.getSearch().getRequestsPerMinute(),
+            props.getDefaultEndpoint().getRequestsPerMinute());
+
+        return manager;
     }
-    
-    /**
-     * Configuration Bucket pour les uploads.
-     */
-    @Bean
-    public Supplier<BucketConfiguration> uploadBucketConfig() {
-        return () -> BucketConfiguration.builder()
-            .addLimit(Bandwidth.simple(uploadLimit, Duration.ofMinutes(1)))
-            .build();
+
+    // -------------------------------------------------------------------------
+    // Configurations des buckets par endpoint
+    // -------------------------------------------------------------------------
+
+    @Bean public Supplier<BucketConfiguration> uploadBucketConfig() {
+        return bucketConfig(props.getUpload().getRequestsPerMinute());
     }
-    
-    /**
-     * Configuration Bucket pour les batch uploads.
-     */
-    @Bean
-    public Supplier<BucketConfiguration> batchBucketConfig() {
-        return () -> BucketConfiguration.builder()
-            .addLimit(Bandwidth.simple(batchLimit, Duration.ofMinutes(1)))
-            .build();
+
+    @Bean public Supplier<BucketConfiguration> batchBucketConfig() {
+        return bucketConfig(props.getBatch().getRequestsPerMinute());
     }
-    
-    /**
-     * Configuration Bucket pour les suppressions.
-     */
-    @Bean
-    public Supplier<BucketConfiguration> deleteBucketConfig() {
-        return () -> BucketConfiguration.builder()
-            .addLimit(Bandwidth.simple(deleteLimit, Duration.ofMinutes(1)))
-            .build();
+
+    @Bean public Supplier<BucketConfiguration> deleteBucketConfig() {
+        return bucketConfig(props.getDelete().getRequestsPerMinute());
     }
-    
-    /**
-     * Configuration Bucket pour les recherches.
-     */
-    @Bean
-    public Supplier<BucketConfiguration> searchBucketConfig() {
-        return () -> BucketConfiguration.builder()
-            .addLimit(Bandwidth.simple(searchLimit, Duration.ofMinutes(1)))
-            .build();
+
+    @Bean public Supplier<BucketConfiguration> searchBucketConfig() {
+        return bucketConfig(props.getSearch().getRequestsPerMinute());
     }
-    
-    /**
-     * Configuration Bucket par défaut.
-     */
-    @Bean
-    public Supplier<BucketConfiguration> defaultBucketConfig() {
+
+    @Bean public Supplier<BucketConfiguration> defaultBucketConfig() {
+        return bucketConfig(props.getDefaultEndpoint().getRequestsPerMinute());
+    }
+
+    // -------------------------------------------------------------------------
+    // Privé
+    // -------------------------------------------------------------------------
+
+    private StatefulRedisConnection<String, byte[]> redisConnection() {
+        String uri = redisPassword != null && !redisPassword.isBlank()
+            ? "redis://:%s@%s:%d".formatted(redisPassword, redisHost, redisPort)
+            : "redis://%s:%d".formatted(redisHost, redisPort);
+
+        RedisCodec<String, byte[]> codec = RedisCodec.of(StringCodec.UTF8, ByteArrayCodec.INSTANCE);
+        return RedisClient.create(uri).connect(codec);
+    }
+
+    private static Supplier<BucketConfiguration> bucketConfig(int requestsPerMinute) {
         return () -> BucketConfiguration.builder()
-            .addLimit(Bandwidth.simple(defaultLimit, Duration.ofMinutes(1)))
+            .addLimit(Bandwidth.simple(requestsPerMinute, Duration.ofMinutes(1)))
             .build();
     }
 }

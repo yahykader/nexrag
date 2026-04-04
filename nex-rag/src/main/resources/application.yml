@@ -233,7 +233,7 @@ antivirus:
   enabled: true
   host: localhost
   port: 3310
-  timeout: 45000              # ms — timeout connexion et lecture socket
+  timeout: 120000              # ms — timeout connexion et lecture socket
   chunk-size: 8192            # bytes — taille des chunks INSTREAM
   max-file-size: 104857600    # bytes — 100 MB
   retry:

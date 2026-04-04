@@ -34,6 +34,14 @@ export class IngestionEffects {
    * 3. Subscribe au WebSocket pour tracking
    * 4. Gère les erreurs et doublons
    */
+
+  // ✅ Helper pour extraire message d'erreur pertinent
+  private extractErrorMessage(error: any): string {
+    return error.error?.message    // ← corps JSON du backend
+      ?? error.error?.error        // ← fallback champ "error"
+      ?? error.message             // ← fallback message HTTP
+      ?? 'Erreur lors de l\'upload';
+  }
   uploadFileAsync$ = createEffect(() =>
     this.actions$.pipe(
       ofType(IngestionActions.uploadFileAsync),
@@ -90,7 +98,7 @@ export class IngestionEffects {
             
             return of(IngestionActions.uploadFileAsyncError({
               fileId,
-              error: error.message || 'Async upload failed'
+              error: this.extractErrorMessage(error)
             }));
           })
         )
@@ -320,7 +328,7 @@ export class IngestionEffects {
             
             return of(IngestionActions.uploadFileError({
               fileId,
-              error: error.message || 'Upload failed'
+              error: this.extractErrorMessage(error)
             }));
           })
         )
@@ -341,7 +349,7 @@ export class IngestionEffects {
           ),
           catchError(error =>
             of(IngestionActions.uploadBatchError({
-              error: error.message || 'Batch upload failed'
+              error: this.extractErrorMessage(error) 
             }))
           )
         )

@@ -15,6 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -93,15 +94,14 @@ class AntivirusGuardSpec {
     }
 
     @Test
-    @DisplayName("DOIT propager AntivirusScanException si le scanner lève une exception technique")
-    void devraitPropogerExceptionTechniqueDuScanner()
-            throws IOException, AntivirusScanException {
+    @DisplayName("DOIT absorber AntivirusScanException et autoriser le fichier (fail-open)")
+    void devraitAbsorberExceptionTechniqueDuScanner() throws IOException {
         MockMultipartFile file = multipartFile("probleme.pdf", "data".getBytes());
         when(antivirusScanner.scanBytes(any(), anyString()))
-            .thenThrow(new AntivirusScanException("Erreur technique ClamAV"));
+            .thenThrow(new AntivirusScanException("Read timed out"));
 
-        assertThatThrownBy(() -> guard.assertClean(file))
-            .isInstanceOf(AntivirusScanException.class);
+        // Fail-open : timeout ClamAV → fichier autorisé, aucune exception
+        assertThatNoException().isThrownBy(() -> guard.assertClean(file));
     }
 
     @Test

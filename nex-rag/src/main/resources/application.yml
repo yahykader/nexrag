@@ -200,7 +200,7 @@ rate-limit:
     requests-per-minute: 20      # Suppression
   search:
     requests-per-minute: 50      # Recherche
-  default:
+  default-endpoint:
     requests-per-minute: 30      # Autres endpoints
 
 # ============================================================================

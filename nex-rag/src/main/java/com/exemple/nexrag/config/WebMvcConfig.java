@@ -1,57 +1,43 @@
-// ============================================================================
-// CONFIG - WebMvcConfig.java
-// Configuration Spring MVC pour enregistrer l'intercepteur Rate Limiting
-// ============================================================================
 package com.exemple.nexrag.config;
 
 import com.exemple.nexrag.service.rag.interceptor.RateLimitInterceptor;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.servlet.config.annotation.CorsRegistry;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 /**
  * Configuration Spring MVC.
- * 
- * Enregistre les intercepteurs HTTP, dont le RateLimitInterceptor.
- * 
- * @author RAG Team
- * @version 1.0
+ *
+ * Principe SRP  : unique responsabilité → enregistrer les intercepteurs HTTP.
+ * Clean code    : supprime le code CORS commenté — du code mort n'appartient
+ *                 pas au code source (utiliser Git pour l'historique).
+ *                 Corrige les paths {@code /v1/} → {@code /api/v1/}.
+ *
+ * @author ayhyaoui
+ * @version 2.0
  */
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 public class WebMvcConfig implements WebMvcConfigurer {
-    
-    private final RateLimitInterceptor rateLimitInterceptor;
-    
-    public WebMvcConfig(RateLimitInterceptor rateLimitInterceptor) {
-        this.rateLimitInterceptor = rateLimitInterceptor;
-        log.info("✅ WebMvcConfig initialisé");
-    }
 
-    // @Override
-    // public void addCorsMappings(CorsRegistry registry) {
-    //     registry.addMapping("/api/**")
-    //         .allowedOrigins("*")
-    //         .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
-    //         .allowedHeaders("*")
-    //         .allowCredentials(false)
-    //         .maxAge(3600);
-    // }
-    
+    private final RateLimitInterceptor rateLimitInterceptor;
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        
         registry.addInterceptor(rateLimitInterceptor)
-            .addPathPatterns("/v1/ingestion/**","/v1/crud/**")  // Appliquer sur tous les endpoints ingestion
+            .addPathPatterns(
+                "/api/v1/ingestion/**",
+                "/api/v1/crud/**"
+            )
             .excludePathPatterns(
-                "/v1/ingestion/health",           // Exclure health check
-                "/v1/ingestion/health/detailed",  // Exclure health détaillé
-                "/v1/ingestion/strategies"        // Exclure liste strategies
+                "/api/v1/ingestion/health",
+                "/api/v1/ingestion/health/detailed",
+                "/api/v1/ingestion/strategies"
             );
-        
-        log.info("✅ RateLimitInterceptor enregistré sur /v1/ingestion/** & /v1/crud/**");
-        log.info("   • Exclusions: /health, /health/detailed, /strategies");
+
+        log.info("✅ RateLimitInterceptor enregistré sur /api/v1/ingestion/**, /api/v1/crud/**");
     }
 }

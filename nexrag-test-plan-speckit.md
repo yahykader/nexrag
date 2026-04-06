@@ -923,48 +923,112 @@ class MultimodalIngestionControllerSpec {
 
 ### User Stories
 
-#### US-21 : Rate limiting par IP/utilisateur
-> En tant qu'ops, je veux limiter le nombre de requêtes par client, afin de protéger le système contre les abus.
+#### US-21 : Rate limiting multi-endpoint par identifiant client
+> En tant qu'ops, je veux limiter le nombre de requêtes par client et par type d'endpoint, afin de protéger le système contre les abus.
 
 **Functional Requirements**
-- FR-21.1 : `RateLimitInterceptor` lit le header `X-User-Id` pour identifier le client
-- FR-21.2 : `RateLimitService` maintient un compteur par client dans Redis avec TTL
-- FR-21.3 : Dépassement de limite retourne HTTP 429 TOO MANY REQUESTS
-- FR-21.4 : Les endpoints `/actuator/**` sont exclus du rate limiting
+- FR-21.1 : `RateLimitInterceptor` résout l'identifiant client par priorité : header `X-User-Id` → attribut de session → IP client (avec support `X-Forwarded-For` et `X-Real-IP`)
+- FR-21.2 : `RateLimitInterceptor.selectLimit()` route vers la bonne méthode de `RateLimitService` selon l'URI et la méthode HTTP : `/upload/batch` → `checkBatchLimit`, `/upload` → `checkUploadLimit`, `/search` → `checkSearchLimit`, `DELETE /file/|/batch/|/files/` → `checkDeleteLimit`, sinon → `checkDefaultLimit`
+- FR-21.3 : `RateLimitService` délègue à Bucket4j via `ProxyManager<String>` avec une bucket par paire `(userId, endpoint)` — clé Redis : `rate-limit:{userId}:{endpoint}`
+- FR-21.4 : Le dépassement de limite retourne HTTP 429 avec les headers `X-RateLimit-Remaining: 0`, `Retry-After: {secondes}`, `X-RateLimit-Reset: {epoch}`
+- FR-21.5 : Les requêtes OPTIONS (CORS preflight) sont court-circuitées immédiatement sans appel à `RateLimitService`
+- FR-21.6 : En cas d'exception Redis dans `RateLimitService.check()`, la requête est autorisée (fail-open) et `RateLimitResult.allowed(0)` est retourné
+- FR-21.7 : Limites configurées via `RateLimitProperties` — upload: 10/min, batch: 5/min, delete: 20/min, search: 50/min, default: 30/min
 
 **Acceptance Criteria**
-- AC-21.1 : Le 11ème appel d'un client limité à 10/min retourne 429
-- AC-21.2 : Après expiration du TTL (1 min), le compteur est réinitialisé
-- AC-21.3 : Un appel à `/actuator/health` n'est pas comptabilisé
+- AC-21.1 : Un appel upload dont la limite est atteinte retourne `RateLimitResult` avec `isAllowed()=false` et `retryAfterSeconds > 0`
+- AC-21.2 : Un appel autorisé retourne `RateLimitResult` avec `isAllowed()=true` et `remainingTokens ≥ 0`
+- AC-21.3 : Une requête OPTIONS retourne `preHandle()=true` sans aucune interaction avec `RateLimitService`
+- AC-21.4 : `resolveUserId` utilise `X-User-Id` en priorité, puis attribut de session, puis IP via `X-Forwarded-For`
+- AC-21.5 : Un URI `/upload` est routé vers `checkUploadLimit`, `/search` vers `checkSearchLimit`, `DELETE /file/123` vers `checkDeleteLimit`
+- AC-21.6 : En cas d'exception dans `check()`, `RateLimitResult.allowed(0)` est retourné (fail-open)
+- AC-21.7 : La réponse 429 contient un corps JSON avec les champs `error`, `message`, `retryAfterSeconds`, `timestamp`
 
 ---
 
-### Classes de Tests à créer — Phase 8
+#### US-22 : Validation de fichiers — taille et extension
+> En tant que système, je veux valider les fichiers entrants avant tout traitement, afin de rejeter les fichiers dangereux ou invalides dès l'entrée.
+
+**Functional Requirements**
+- FR-22.1 : `FileValidator.validate()` rejette les fichiers null ou vides (0 octet)
+- FR-22.2 : `FileValidator.validate()` rejette les fichiers dont le nom est absent ou vide
+- FR-22.3 : `FileValidator.validate()` rejette les fichiers dont la taille dépasse `FileSizeConstants.MAX_FILE_SIZE_BYTES`, avec un message incluant la taille réelle en MB et la limite
+- FR-22.4 : `FileValidator.validate()` rejette les extensions dangereuses : `exe`, `bat`, `cmd`, `msi`, `com`, `scr`, `vbs`, `ps1`, `sh`
+- FR-22.5 : `FileValidator.validateBatch()` rejette les listes null ou vides, puis délègue à `validate()` pour chaque fichier
+- FR-22.6 : `AudioFileValidator.validate()` rejette les fichiers audio null/vides et ceux dont la taille dépasse `VoiceConstants.MAX_AUDIO_SIZE_BYTES` (25 MB)
+
+**Acceptance Criteria**
+- AC-22.1 : Un PDF valide (nom présent, taille ≤ max, extension autorisée) passe sans exception *(déjà couvert par `FileValidatorSpec`)*
+- AC-22.2 : Un fichier null lève `IllegalArgumentException("Fichier vide ou absent")`
+- AC-22.3 : Un fichier de 0 octet lève `IllegalArgumentException("Fichier vide ou absent")`
+- AC-22.4 : Un fichier sans nom lève `IllegalArgumentException("Nom de fichier absent")`
+- AC-22.5 : Un fichier à `MAX_FILE_SIZE_BYTES + 1` lève `IllegalArgumentException` contenant la taille en MB et la limite
+- AC-22.6 : Un fichier à exactement `MAX_FILE_SIZE_BYTES` passe sans exception
+- AC-22.7 : Un fichier `.exe` lève `IllegalArgumentException` mentionnant `.exe`
+- AC-22.8 : Un batch null ou vide lève `IllegalArgumentException("Aucun fichier fourni")`
+- AC-22.9 : Un batch contenant un fichier invalide propage l'exception de `validate()`
+- AC-22.10 : Un fichier audio > 25 MB lève `IllegalArgumentException` mentionnant la taille reçue
+
+---
+
+#### US-23 : Validation de signature de fichiers (magic bytes)
+> En tant que système de sécurité, je veux vérifier que le contenu réel d'un fichier correspond à son extension déclarée, afin de bloquer les fichiers déguisés.
+
+**Functional Requirements**
+- FR-23.1 : `FileSignatureValidator.validate()` bloque systématiquement les extensions dangereuses (exe, dll, bat, sh, cmd, vbs, ps1, jar) — indépendamment du contenu
+- FR-23.2 : `FileSignatureValidator.validate()` lit les premiers octets du fichier et les compare aux magic bytes de l'extension déclarée
+- FR-23.3 : Si la signature est incorrecte, `SecurityException` est levée avec un message explicite
+- FR-23.4 : Si aucune signature n'est connue pour l'extension (ex : .txt, .csv), la validation est ignorée (skip silencieux)
+- FR-23.5 : `detectRealType()` parcourt toutes les signatures connues et retourne l'extension correspondante, ou `null` si inconnue
+- FR-23.6 : `isExtensionMatching()` traite DOCX/XLSX/PPTX comme équivalents (même signature ZIP `50 4B 03 04`)
+- FR-23.7 : `validateComplete()` retourne un record `ValidationResult(isValid, errorMessage, detectedType, extensionMatches)` et ne lève pas d'exception
+
+**Acceptance Criteria**
+- AC-23.1 : Un fichier déclaré `.exe` lève `SecurityException` contenant "EXE" et "dangereuse"
+- AC-23.2 : Un fichier dont les magic bytes ne correspondent pas à l'extension déclarée (ex : contenu PNG nommé `.pdf`) lève `SecurityException` contenant "Signature invalide"
+- AC-23.3 : Un fichier texte (`.txt`) sans signature connue passe `validate()` sans exception
+- AC-23.4 : `detectRealType()` retourne `"pdf"` pour un fichier dont les premiers octets sont `25 50 44 46` (`%PDF`)
+- AC-23.5 : `validateComplete()` retourne `ValidationResult(isValid=false, ...)` pour un fichier `.exe`
+- AC-23.6 : `isExtensionMatching()` retourne `true` pour un fichier DOCX dont le type détecté est `zip`
+- AC-23.7 : Un fichier trop court pour contenir la signature attendue lève `SecurityException` mentionnant la taille
+
+---
+
+### Classes de Tests — Phase 8
 
 ```
-src/test/java/com/exemple/nexrag/service/rag/
-└── interceptor/
-    ├── RateLimitInterceptorSpec.java
-    └── RateLimitServiceSpec.java
+src/test/java/com/exemple/nexrag/
+├── validation/
+│   ├── FileValidatorSpec.java            ✅ implémenté
+│   ├── FileSignatureValidatorSpec.java   ⬜ à créer
+│   └── AudioFileValidatorSpec.java       ⬜ à créer
+└── service/rag/interceptor/
+    ├── RateLimitInterceptorSpec.java     ⬜ à créer
+    └── RateLimitServiceSpec.java         ⬜ à créer
 ```
 
-### Exemple de Spec — `RateLimitInterceptorSpec.java`
+---
+
+### Spec — `RateLimitInterceptorSpec.java`
 
 ```java
-@DisplayName("Spec : RateLimitInterceptor — Limitation de débit")
+@DisplayName("Spec : RateLimitInterceptor — Limitation de débit par endpoint")
 @ExtendWith(MockitoExtension.class)
 class RateLimitInterceptorSpec {
 
     @Mock private RateLimitService rateLimitService;
+    @Mock private ObjectMapper     objectMapper;
     @InjectMocks private RateLimitInterceptor interceptor;
 
-    // US-21 / AC-21.1
+    // US-21 / AC-21.1 + AC-21.7
     @Test
-    @DisplayName("DOIT bloquer avec 429 quand la limite est atteinte")
-    void shouldBlockWith429WhenLimitExceeded() throws Exception {
-        when(rateLimitService.isLimitExceeded("user-42")).thenReturn(true);
+    @DisplayName("DOIT retourner 429 et écrire le corps JSON quand la limite upload est atteinte")
+    void shouldReturn429WithJsonBodyWhenUploadLimitExceeded() throws Exception {
+        when(rateLimitService.checkUploadLimit("user-42"))
+            .thenReturn(RateLimitResult.blocked(30L));
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"error\":\"Too Many Requests\"}");
 
-        MockHttpServletRequest req = new MockHttpServletRequest();
+        MockHttpServletRequest  req = new MockHttpServletRequest("POST", "/api/upload");
         req.addHeader("X-User-Id", "user-42");
         MockHttpServletResponse res = new MockHttpServletResponse();
 
@@ -972,19 +1036,355 @@ class RateLimitInterceptorSpec {
 
         assertThat(proceed).isFalse();
         assertThat(res.getStatus()).isEqualTo(429);
+        assertThat(res.getHeader("Retry-After")).isEqualTo("30");
+        assertThat(res.getHeader("X-RateLimit-Remaining")).isEqualTo("0");
+    }
+
+    // US-21 / AC-21.2
+    @Test
+    @DisplayName("DOIT ajouter X-RateLimit-Remaining et laisser passer quand la limite n'est pas atteinte")
+    void shouldPassWithRemainingHeaderWhenAllowed() throws Exception {
+        when(rateLimitService.checkDefaultLimit("user-1"))
+            .thenReturn(RateLimitResult.allowed(29L));
+
+        MockHttpServletRequest  req = new MockHttpServletRequest("GET", "/api/documents");
+        req.addHeader("X-User-Id", "user-1");
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        boolean proceed = interceptor.preHandle(req, res, new Object());
+
+        assertThat(proceed).isTrue();
+        assertThat(res.getHeader("X-RateLimit-Remaining")).isEqualTo("29");
     }
 
     // US-21 / AC-21.3
     @Test
-    @DisplayName("DOIT ignorer les endpoints actuator")
-    void shouldBypassActuatorEndpoints() throws Exception {
-        MockHttpServletRequest req = new MockHttpServletRequest("GET", "/actuator/health");
+    @DisplayName("DOIT court-circuiter les requêtes OPTIONS sans appeler RateLimitService")
+    void shouldBypassOptionsCorsPreflightWithoutCallingService() throws Exception {
+        MockHttpServletRequest  req = new MockHttpServletRequest("OPTIONS", "/api/upload");
         MockHttpServletResponse res = new MockHttpServletResponse();
 
         boolean proceed = interceptor.preHandle(req, res, new Object());
 
         assertThat(proceed).isTrue();
         verifyNoInteractions(rateLimitService);
+    }
+
+    // US-21 / AC-21.4
+    @Test
+    @DisplayName("DOIT utiliser l'IP X-Forwarded-For quand X-User-Id est absent")
+    void shouldFallbackToForwardedIpWhenNoUserId() throws Exception {
+        when(rateLimitService.checkDefaultLimit("203.0.113.5"))
+            .thenReturn(RateLimitResult.allowed(30L));
+
+        MockHttpServletRequest  req = new MockHttpServletRequest("GET", "/api/documents");
+        req.addHeader("X-Forwarded-For", "203.0.113.5, 10.0.0.1");
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        interceptor.preHandle(req, res, new Object());
+
+        verify(rateLimitService).checkDefaultLimit("203.0.113.5");
+    }
+
+    // US-21 / AC-21.5
+    @Test
+    @DisplayName("DOIT router /search vers checkSearchLimit")
+    void shouldRouteSearchEndpointToSearchLimit() throws Exception {
+        when(rateLimitService.checkSearchLimit("user-7"))
+            .thenReturn(RateLimitResult.allowed(50L));
+
+        MockHttpServletRequest  req = new MockHttpServletRequest("POST", "/api/search");
+        req.addHeader("X-User-Id", "user-7");
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        interceptor.preHandle(req, res, new Object());
+
+        verify(rateLimitService).checkSearchLimit("user-7");
+        verify(rateLimitService, never()).checkDefaultLimit(any());
+    }
+
+    // US-21 / AC-21.5
+    @Test
+    @DisplayName("DOIT router DELETE /file/{id} vers checkDeleteLimit")
+    void shouldRouteDeleteFileToDeleteLimit() throws Exception {
+        when(rateLimitService.checkDeleteLimit("user-3"))
+            .thenReturn(RateLimitResult.allowed(20L));
+
+        MockHttpServletRequest  req = new MockHttpServletRequest("DELETE", "/api/file/abc-123");
+        req.addHeader("X-User-Id", "user-3");
+        MockHttpServletResponse res = new MockHttpServletResponse();
+
+        interceptor.preHandle(req, res, new Object());
+
+        verify(rateLimitService).checkDeleteLimit("user-3");
+    }
+}
+```
+
+---
+
+### Spec — `RateLimitServiceSpec.java`
+
+```java
+@DisplayName("Spec : RateLimitService — Gestion des quotas Bucket4j/Redis")
+@ExtendWith(MockitoExtension.class)
+class RateLimitServiceSpec {
+
+    @Mock private ProxyManager<String>            proxyManager;
+    @Mock private ProxyManager.Builder<String>    bucketBuilder;
+    @Mock private Bucket                          bucket;
+    @Mock private ConsumptionProbe                probe;
+    @Mock private Supplier<BucketConfiguration>   uploadConfig;
+    @Mock private Supplier<BucketConfiguration>   batchConfig;
+    @Mock private Supplier<BucketConfiguration>   deleteConfig;
+    @Mock private Supplier<BucketConfiguration>   searchConfig;
+    @Mock private Supplier<BucketConfiguration>   defaultConfig;
+
+    private RateLimitService service;
+
+    @BeforeEach
+    void setUp() {
+        service = new RateLimitService(proxyManager, uploadConfig, batchConfig,
+                                        deleteConfig, searchConfig, defaultConfig);
+        when(proxyManager.builder()).thenReturn(bucketBuilder);
+        when(bucketBuilder.build(anyString(), any())).thenReturn(bucket);
+    }
+
+    // US-21 / AC-21.2
+    @Test
+    @DisplayName("DOIT retourner allowed avec remainingTokens quand le token est consommé")
+    void shouldReturnAllowedWithRemainingTokensWhenConsumed() {
+        when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
+        when(probe.isConsumed()).thenReturn(true);
+        when(probe.getRemainingTokens()).thenReturn(9L);
+
+        RateLimitResult result = service.checkUploadLimit("user-1");
+
+        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.getRemainingTokens()).isEqualTo(9L);
+    }
+
+    // US-21 / AC-21.1
+    @Test
+    @DisplayName("DOIT retourner blocked avec retryAfterSeconds quand la limite est atteinte")
+    void shouldReturnBlockedWithRetryAfterWhenLimitReached() {
+        when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
+        when(probe.isConsumed()).thenReturn(false);
+        when(probe.getNanosToWaitForRefill()).thenReturn(30_000_000_000L); // 30s
+
+        RateLimitResult result = service.checkUploadLimit("user-1");
+
+        assertThat(result.isAllowed()).isFalse();
+        assertThat(result.getRetryAfterSeconds()).isEqualTo(30L);
+    }
+
+    // US-21 / AC-21.6
+    @Test
+    @DisplayName("DOIT retourner allowed(0) en cas d'exception Redis (fail-open)")
+    void shouldReturnAllowedOnRedisException() {
+        when(bucket.tryConsumeAndReturnRemaining(1)).thenThrow(new RuntimeException("Redis down"));
+
+        RateLimitResult result = service.checkUploadLimit("user-1");
+
+        assertThat(result.isAllowed()).isTrue();
+        assertThat(result.getRemainingTokens()).isZero();
+    }
+
+    // US-21 / AC-21.5 — clé Redis
+    @Test
+    @DisplayName("DOIT construire la clé Redis rate-limit:{userId}:{endpoint}")
+    void shouldBuildCorrectRedisKey() {
+        when(bucket.tryConsumeAndReturnRemaining(1)).thenReturn(probe);
+        when(probe.isConsumed()).thenReturn(true);
+        when(probe.getRemainingTokens()).thenReturn(5L);
+
+        service.checkSearchLimit("user-99");
+
+        verify(bucketBuilder).build(eq("rate-limit:user-99:search"), any());
+    }
+}
+```
+
+---
+
+### Spec — `FileSignatureValidatorSpec.java`
+
+```java
+@DisplayName("Spec : FileSignatureValidator — Validation des magic bytes")
+@ExtendWith(MockitoExtension.class)
+class FileSignatureValidatorSpec {
+
+    private FileSignatureValidator validator;
+
+    @BeforeEach
+    void setUp() {
+        validator = new FileSignatureValidator();
+    }
+
+    // US-23 / AC-23.1
+    @Test
+    @DisplayName("DOIT lever SecurityException pour une extension dangereuse (.exe)")
+    void shouldThrowSecurityExceptionForDangerousExtension() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "virus.exe", "application/octet-stream",
+            new byte[]{0x4D, 0x5A, 0x00, 0x01} // MZ header
+        );
+
+        assertThatThrownBy(() -> validator.validate(file, "exe"))
+            .isInstanceOf(SecurityException.class)
+            .hasMessageContainingIgnoringCase("EXE")
+            .hasMessageContaining("dangereuse");
+    }
+
+    // US-23 / AC-23.2
+    @Test
+    @DisplayName("DOIT lever SecurityException si les magic bytes ne correspondent pas à l'extension")
+    void shouldThrowSecurityExceptionForSignatureMismatch() {
+        // Fichier PNG renommé .pdf
+        byte[] pngBytes = new byte[]{(byte)0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A};
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "fake.pdf", "application/pdf", pngBytes
+        );
+
+        assertThatThrownBy(() -> validator.validate(file, "pdf"))
+            .isInstanceOf(SecurityException.class)
+            .hasMessageContaining("Signature invalide");
+    }
+
+    // US-23 / AC-23.3
+    @Test
+    @DisplayName("DOIT ignorer la validation de signature pour les extensions sans magic bytes (.txt)")
+    void shouldSkipSignatureValidationForUnknownExtension() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "notes.txt", "text/plain",
+            "Hello world".getBytes()
+        );
+
+        assertThatNoException().isThrownBy(() -> validator.validate(file, "txt"));
+    }
+
+    // US-23 / AC-23.4
+    @Test
+    @DisplayName("DOIT détecter 'pdf' pour un fichier commençant par %PDF")
+    void shouldDetectPdfType() throws Exception {
+        byte[] pdfBytes = new byte[]{0x25, 0x50, 0x44, 0x46, 0x2D, 0x31}; // %PDF-1
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "doc.pdf", "application/pdf", pdfBytes
+        );
+
+        String detectedType = validator.detectRealType(file);
+
+        assertThat(detectedType).isEqualTo("pdf");
+    }
+
+    // US-23 / AC-23.5
+    @Test
+    @DisplayName("DOIT retourner ValidationResult invalide pour un .exe via validateComplete()")
+    void shouldReturnInvalidResultForExeViaValidateComplete() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "bad.exe", "application/octet-stream",
+            new byte[]{0x4D, 0x5A}
+        );
+
+        FileSignatureValidator.ValidationResult result = validator.validateComplete(file, "exe");
+
+        assertThat(result.isValid()).isFalse();
+        assertThat(result.errorMessage()).isNotBlank();
+    }
+
+    // US-23 / AC-23.6
+    @Test
+    @DisplayName("DOIT accepter un DOCX dont le type détecté est zip (même signature)")
+    void shouldAcceptDocxWhenDetectedTypeIsZip() throws Exception {
+        byte[] zipBytes = new byte[]{0x50, 0x4B, 0x03, 0x04, 0x14, 0x00}; // PK\x03\x04
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "report.docx",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            zipBytes
+        );
+
+        assertThat(validator.isExtensionMatching(file, "docx")).isTrue();
+    }
+
+    // US-23 / AC-23.7
+    @Test
+    @DisplayName("DOIT lever SecurityException si le fichier est trop court pour sa signature")
+    void shouldThrowWhenFileTooShortForSignature() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "short.pdf", "application/pdf",
+            new byte[]{0x25} // 1 seul byte, PDF signature = 4 bytes
+        );
+
+        assertThatThrownBy(() -> validator.validate(file, "pdf"))
+            .isInstanceOf(SecurityException.class)
+            .hasMessageContaining("trop court");
+    }
+}
+```
+
+---
+
+### Spec — `AudioFileValidatorSpec.java`
+
+```java
+@DisplayName("Spec : AudioFileValidator — Validation des fichiers audio")
+@ExtendWith(MockitoExtension.class)
+class AudioFileValidatorSpec {
+
+    private AudioFileValidator validator;
+
+    @BeforeEach
+    void setUp() {
+        validator = new AudioFileValidator();
+    }
+
+    // US-22 / AC-22.10
+    @Test
+    @DisplayName("DOIT lever IllegalArgumentException pour un fichier audio null")
+    void shouldRejectNullAudioFile() {
+        assertThatIllegalArgumentException()
+            .isThrownBy(() -> validator.validate(null))
+            .withMessageContaining("vide");
+    }
+
+    // US-22 / AC-22.10
+    @Test
+    @DisplayName("DOIT lever IllegalArgumentException pour un fichier audio vide")
+    void shouldRejectEmptyAudioFile() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "audio.mp3", "audio/mpeg", new byte[0]
+        );
+
+        assertThatIllegalArgumentException()
+            .isThrownBy(() -> validator.validate(file))
+            .withMessageContaining("vide");
+    }
+
+    // US-22 / AC-22.10
+    @Test
+    @DisplayName("DOIT lever IllegalArgumentException si le fichier audio dépasse 25 MB")
+    void shouldRejectAudioFileExceedingMaxSize() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "audio.mp3", "audio/mpeg", new byte[0]
+        ) {
+            @Override public long    getSize()  { return VoiceConstants.MAX_AUDIO_SIZE_BYTES + 1; }
+            @Override public boolean isEmpty()  { return false; }
+        };
+
+        assertThatIllegalArgumentException()
+            .isThrownBy(() -> validator.validate(file))
+            .withMessageContaining("25 MB");
+    }
+
+    // US-22 / AC-22.10
+    @Test
+    @DisplayName("DOIT accepter un fichier audio valide en dessous de la limite")
+    void shouldAcceptValidAudioFile() {
+        MockMultipartFile file = new MockMultipartFile(
+            "file", "speech.wav", "audio/wav", new byte[]{1, 2, 3}
+        );
+
+        assertThatNoException().isThrownBy(() -> validator.validate(file));
     }
 }
 ```

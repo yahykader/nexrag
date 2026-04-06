@@ -53,7 +53,7 @@
             **/monitoring/**,
             **/dto/**,
             **/config/**,
-            **/constants/**,
+            **/constant/**,
             **/util/**,
             **/*Application.java
         </sonar.exclusions>

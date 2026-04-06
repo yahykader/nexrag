@@ -36,6 +36,7 @@ RÈGLES GÉNÉRALES (constitution.md)
 | 7 | `controller` | Unitaire (MockMvc) | 🟡 Moyenne |
 | 8 | `interceptor` + `validation` | Unitaire | 🟡 Moyenne |
 | 9 | Intégration bout-en-bout | Intégration | 🔴 Critique |
+| 10 | `websocket` (SessionManager + Handler + AssistantController + CleanupTask) | Unitaire | 🟠 Haute |
 
 ---
 
@@ -1463,6 +1464,200 @@ src/test/java/com/exemple/nexrag/service/rag/
 
 ---
 
+---
+
+# PHASE 10 — WebSocket : Sessions, Handler & Cleanup
+
+## Spec : `phase-10-websocket.md`
+
+### User Stories
+
+#### US-24 : Cycle de vie des sessions WebSocket
+> En tant que système, je veux gérer le cycle de vie des sessions WebSocket, afin de maintenir un état cohérent des connexions actives.
+
+**Functional Requirements**
+- FR-24.1 : `registerSession` enregistre la session dans les maps `sessions` et `activeConnections`
+- FR-24.2 : `unregisterSession` supprime la session des deux maps et la marque déconnectée via `markDisconnected()`
+- FR-24.3 : `updateActivity` incrémente `messageCount` et met à jour `lastActivity`
+- FR-24.4 : `setConversationId` / `getConversationId` stockent et récupèrent l'identifiant de conversation lié à la session
+- FR-24.5 : `getSession(sessionId)` retourne la `WebSocketSession` active correspondante
+
+**Acceptance Criteria**
+- AC-24.1 : Après `registerSession`, `isActive(sessionId)` retourne `true` et `getActiveSessionCount()` vaut 1
+- AC-24.2 : Après `unregisterSession`, `isActive(sessionId)` retourne `false` et `getActiveSessionCount()` vaut 0
+- AC-24.3 : `updateActivity` appelé deux fois → `messageCount` vaut 2
+- AC-24.4 : `setConversationId(id, "conv-abc")` puis `getConversationId(id)` retourne `"conv-abc"`
+- AC-24.5 : `getConversationId(id)` retourne `null` si la session est inconnue
+- AC-24.6 : `getSession(id)` retourne l'instance de `WebSocketSession` enregistrée
+
+---
+
+#### US-25 : Statistiques et nettoyage des sessions
+> En tant qu'ops, je veux obtenir des statistiques et nettoyer les sessions inactives, afin de surveiller la santé du système et libérer les ressources.
+
+**Functional Requirements**
+- FR-25.1 : `getStats()` calcule `totalSessions`, `activeSessions`, `totalMessages`, `avgMessagesPerSession`, `avgConnectionDuration`
+- FR-25.2 : `cleanupInactiveSessions(thresholdMs)` supprime les sessions déconnectées depuis plus de `thresholdMs` ms
+- FR-25.3 : `getActiveSessionIds()` retourne l'ensemble des identifiants de sessions actives
+
+**Acceptance Criteria**
+- AC-25.1 : `getStats()` sur un manager vide retourne tous les champs numériques à zéro
+- AC-25.2 : Après 2 `updateActivity`, `getStats().getAvgMessagesPerSession()` vaut 2.0 et `getTotalMessages()` vaut 2
+- AC-25.3 : `getActiveSessionIds()` contient exactement les identifiants des sessions enregistrées
+- AC-25.4 : Avec seuil `-1ms` et session déconnectée, `cleanupInactiveSessions` la supprime de la map `sessions`
+- AC-25.5 : Avec seuil `Long.MAX_VALUE`, la session déconnectée est conservée dans la map
+
+---
+
+#### US-26 : Cycle de vie et routage des messages (WebSocketHandler)
+> En tant que handler WebSocket générique, je veux gérer le cycle de vie des connexions et router les messages par type.
+
+**Functional Requirements**
+- FR-26.1 : `afterConnectionEstablished` enregistre la session dans la map `sessions` et invoque `onConnectionEstablished`
+- FR-26.2 : `handleTextMessage` avec type `"ping"` répond avec un message de type `"pong"` contenant un `timestamp`
+- FR-26.3 : `handleTextMessage` avec type `"pong"` est traité silencieusement sans envoyer de réponse
+- FR-26.4 : `handleTextMessage` sans champ `type` envoie une erreur avec code `MISSING_TYPE`
+- FR-26.5 : JSON invalide dans `handleTextMessage` envoie une erreur avec code `PROCESSING_ERROR`
+- FR-26.6 : `afterConnectionClosed` retire la session de la map et invoque `onConnectionClosed`
+- FR-26.7 : `handleTransportError` retire la session de la map et invoque `onTransportError`
+- FR-26.8 : `broadcast` envoie le message à toutes les sessions présentes dans la map
+- FR-26.9 : `truncate` tronque les chaînes longues en ajoutant `"..."`, retourne `null` pour une entrée nulle
+- FR-26.10 : `putSessionData` / `getSessionData` stockent et récupèrent des données arbitraires par session
+
+**Acceptance Criteria**
+- AC-26.1 : Après connexion, `getActiveSessionCount()` vaut 1 et `connectionEstablishedCalled` est `true`
+- AC-26.2 : Un ping → message de type `"pong"` envoyé à la session avec champ `timestamp`
+- AC-26.3 : Message `"pong"` → aucun `sendMessage` déclenché sur la session
+- AC-26.4 : Message sans type → erreur JSON avec `"code": "MISSING_TYPE"`
+- AC-26.5 : JSON invalide → erreur avec `"code": "PROCESSING_ERROR"`
+- AC-26.6 : Après fermeture, `getActiveSessionCount()` revient à 0 et `connectionClosedCalled` est `true`
+- AC-26.7 : Après erreur transport, `getActiveSessionCount()` revient à 0 et `transportErrorCalled` est `true`
+- AC-26.8 : Avec 2 sessions actives, `broadcast` appelle `sendMessage` sur les 2
+- AC-26.9 : `truncate("A"*100, 50)` retourne une chaîne de 53 caractères terminant par `"..."`
+- AC-26.10 : `truncate("Court", 50)` retourne `"Court"` intact ; `truncate(null, 50)` retourne `null`
+- AC-26.11 : `putSessionData(id, "clé", "valeur")` → `getSessionData(id)` contient l'entrée `"clé"="valeur"`
+
+---
+
+#### US-27 : Messages RAG assistant (WebSocketAssistantController)
+> En tant que client RAG, je veux envoyer des messages d'initialisation, de requête et d'annulation via WebSocket et recevoir les réponses appropriées.
+
+**Functional Requirements**
+- FR-27.1 : `onConnectionEstablished` enregistre la session comme `"anonymous"` et envoie un message de type `"connected"` avec `sessionId` et `timestamp`
+- FR-27.2 : `onConnectionClosed` et `onTransportError` appellent `sessionManager.unregisterSession(sessionId)`
+- FR-27.3 : Un message `"init"` crée un `conversationId` préfixé `conv_`, le stocke via `setConversationId` et envoie `"conversation_created"` avec `userId` et `conversationId`
+- FR-27.4 : Un message `"query"` avec texte non vide envoie `"query_received"` avec `query` et `conversationId` (chaîne vide si aucune conversation active)
+- FR-27.5 : Un message `"query"` avec texte absent ou blanc envoie une erreur avec code `MISSING_QUERY`
+- FR-27.6 : Un message `"cancel"` envoie `"cancelled"` avec message `"Stream annulé"`
+- FR-27.7 : Un type inconnu envoie une erreur avec code `UNKNOWN_TYPE`
+- FR-27.8 : Tout message entrant déclenche `sessionManager.updateActivity(sessionId)`
+- FR-27.9 : `broadcastToAll(message)` diffuse le message à toutes les sessions actives dans la map
+
+**Acceptance Criteria**
+- AC-27.1 : `afterConnectionEstablished` → `registerSession(session, "anonymous")` + message `type="connected"` avec `sessionId="session-abc"`
+- AC-27.2 : `afterConnectionClosed` → `unregisterSession("session-abc")` appelé
+- AC-27.3 : `handleTransportError` → `unregisterSession("session-abc")` appelé
+- AC-27.4 : Message `init` avec `userId` → message `conversation_created` avec `userId` + `conversationId` commençant par `"conv_"`
+- AC-27.5 : Message `query` avec texte → `query_received` avec les champs `query` et `conversationId`
+- AC-27.6 : Message `query` sans champ `text` → erreur `MISSING_QUERY`
+- AC-27.7 : Message `query` avec `text="   "` → erreur `MISSING_QUERY`
+- AC-27.8 : Message `cancel` → `"type": "cancelled"`, `"message": "Stream annulé"`
+- AC-27.9 : Type `"weirdAction"` → erreur `UNKNOWN_TYPE`
+- AC-27.10 : Message `cancel` → `updateActivity("session-abc")` appelé exactement une fois
+- AC-27.11 : `conversationId` nul → champ `conversationId` de `query_received` vaut `""`
+- AC-27.12 : `broadcastToAll` → `sendMessage` appelé sur toutes les sessions actives dans la map
+
+---
+
+#### US-28 : Tâches planifiées de maintenance WebSocket
+> En tant qu'ops, je veux que les sessions inactives soient nettoyées automatiquement et que les statistiques soient loguées périodiquement.
+
+**Functional Requirements**
+- FR-28.1 : `cleanupInactiveSessions()` lit le seuil depuis `WebSocketProperties.getInactiveThresholdMs()` et délègue à `sessionManager.cleanupInactiveSessions(thresholdMs)`
+- FR-28.2 : `logStats()` récupère les statistiques via `sessionManager.getStats()` et les logue
+- FR-28.3 : `cleanupInactiveSessions()` interroge `sessionManager.getActiveSessionCount()` avant et après le nettoyage pour calculer le nombre de sessions supprimées
+
+**Acceptance Criteria**
+- AC-28.1 : `cleanupInactiveSessions()` appelle `sessionManager.cleanupInactiveSessions(3_600_000L)` quand `props.getInactiveThresholdMs() = 3_600_000L`
+- AC-28.2 : `logStats()` appelle `sessionManager.getStats()` exactement une fois
+- AC-28.3 : `cleanupInactiveSessions()` appelle `getActiveSessionCount()` au moins deux fois
+- AC-28.4 : Le seuil transmis à `cleanupInactiveSessions` provient toujours de `props.getInactiveThresholdMs()`
+
+---
+
+### Classes de Tests à créer — Phase 10
+
+```
+src/test/java/com/exemple/nexrag/websocket/
+├── WebSocketSessionManagerSpec.java    ✅ implémenté
+├── WebSocketHandlerSpec.java           ✅ implémenté
+├── WebSocketAssistantControllerSpec.java ✅ implémenté
+└── WebSocketCleanupTaskSpec.java       ✅ implémenté
+```
+
+> **Note** : les tests sont dans le package `com.exemple.nexrag.websocket` (même package que les classes testées),
+> ce qui permet l'accès aux méthodes `protected` de `WebSocketHandler` sans contexte Spring.
+
+### Dépendances de Test — Phase 10
+
+Aucune dépendance supplémentaire : `spring-boot-starter-test` (JUnit 5 + Mockito + AssertJ) et
+`spring-boot-starter-websocket` (déjà présents dans `pom.xml`) sont suffisants.
+
+---
+
+### Exemple de Spec — `WebSocketAssistantControllerSpec.java`
+
+```java
+@DisplayName("Spec : WebSocketAssistantController — Routage des messages RAG assistant")
+@ExtendWith(MockitoExtension.class)
+class WebSocketAssistantControllerSpec {
+
+    @Mock private WebSocketSessionManager sessionManager;
+    @Mock private WebSocketSession session;
+
+    private ObjectMapper objectMapper;
+    private WebSocketAssistantController controller;
+
+    @BeforeEach
+    void setUp() {
+        objectMapper = new ObjectMapper();
+        controller   = new WebSocketAssistantController(objectMapper, sessionManager);
+        when(session.getId()).thenReturn("session-abc");
+    }
+
+    // US-27 / AC-27.1
+    @Test
+    @DisplayName("DOIT enregistrer la session comme 'anonymous' et envoyer le message connected")
+    void devraitEnregistrerSessionAnonymousEtEnvoyerConnected() throws Exception {
+        controller.afterConnectionEstablished(session);
+
+        verify(sessionManager).registerSession(session, "anonymous");
+        ArgumentCaptor<TextMessage> captor = ArgumentCaptor.forClass(TextMessage.class);
+        verify(session).sendMessage(captor.capture());
+
+        Map<?, ?> msg = objectMapper.readValue(captor.getValue().getPayload(), Map.class);
+        assertThat(msg.get("type")).isEqualTo("connected");
+        assertThat(msg.get("sessionId")).isEqualTo("session-abc");
+    }
+
+    // US-27 / AC-27.6
+    @Test
+    @DisplayName("DOIT envoyer l'erreur MISSING_QUERY pour un message query sans champ text")
+    void devraitEnvoyerErreurMissingQuerySansChampText() throws Exception {
+        controller.handleTextMessage(session, new TextMessage("{\"type\":\"query\"}"));
+
+        ArgumentCaptor<TextMessage> captor = ArgumentCaptor.forClass(TextMessage.class);
+        verify(session).sendMessage(captor.capture());
+
+        Map<?, ?> response = objectMapper.readValue(captor.getValue().getPayload(), Map.class);
+        assertThat(response.get("type")).isEqualTo("error");
+        assertThat(((Map<?, ?>) response.get("error")).get("code")).isEqualTo("MISSING_QUERY");
+    }
+}
+```
+
+---
+
 ## Récapitulatif des Dépendances Maven (scope test)
 
 ```xml
@@ -1546,6 +1741,10 @@ SEMAINE 3 — Phases 5, 6 & 7 (Voice, Metrics, Facade, Controller)
 SEMAINE 4 — Phases 8 & 9 (Interceptor, Validation, Intégration)
   → Objectif : tests bout-en-bout avec vraie infra (Testcontainers)
   → KPI : pipeline complet vert en CI/CD
+
+SEMAINE 5 — Phase 10 (WebSocket)
+  → Objectif : couvrir le package websocket (SessionManager, Handler, AssistantController, CleanupTask)
+  → KPI : 80% coverage sur le package websocket
 ```
 
 ---

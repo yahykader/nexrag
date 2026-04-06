@@ -167,6 +167,8 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test, reactor-test (StepVerifier for Flux-based streaming) (006-phase6-facade)
 - N/A — all dependencies mocked; no real infrastructure in unit tests (006-phase6-facade)
 - Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (MockMvc, `@WebMvcTest`), Jakarta Bean Validation (`@NotBlank`) (007-phase7-controllers)
+- Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (`MockHttpServletRequest`/`MockHttpServletResponse`), Bucket4j (`io.github.bucket4j:bucket4j_jdk17-lettuce`) (008-interceptor-validation)
+- Redis (mocked via `ProxyManager<String>` Mockito mock — no real Redis in unit tests) (008-interceptor-validation)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

@@ -27,6 +27,9 @@ public class OpenAiProperties {
     @NotBlank
     private String apiKey;
 
+    /** URL de base de l'API OpenAI. Null = URL officielle par défaut. Surchargeable en tests. */
+    private String baseUrl;
+
     private boolean enabled = true;
 
     private String embeddingModel = "text-embedding-3-small";

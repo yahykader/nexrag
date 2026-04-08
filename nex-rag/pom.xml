@@ -406,6 +406,35 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Phase 9 — Tests d'intégration : Testcontainers JUnit 5 + Redis + core -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.19.7</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.19.7</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Phase 9 — Awaitility : assertions asynchrones (streaming SSE) -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Phase 9 — WebTestClient pour tests HTTP intégration (reactive test client) -->
+        <!-- <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+            <scope>test</scope>
+        </dependency> -->
+
     </dependencies>
 
     <build>

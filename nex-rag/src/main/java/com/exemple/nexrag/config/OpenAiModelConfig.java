@@ -49,6 +49,7 @@ public class OpenAiModelConfig {
 
         EmbeddingModel base = OpenAiEmbeddingModel.builder()
             .apiKey(props.getApiKey())
+            .baseUrl(props.getBaseUrl())
             .modelName(props.getEmbeddingModel())
             .timeout(Duration.ofSeconds(props.getTimeoutSeconds()))
             .maxRetries(props.getMaxRetries())
@@ -70,6 +71,7 @@ public class OpenAiModelConfig {
 
         return OpenAiChatModel.builder()
             .apiKey(props.getApiKey())
+            .baseUrl(props.getBaseUrl())
             .modelName(props.getChatModel())
             .temperature(props.getTemperature())
             .maxTokens(props.getMaxTokens())
@@ -86,6 +88,7 @@ public class OpenAiModelConfig {
 
         return OpenAiStreamingChatModel.builder()
             .apiKey(props.getApiKey())
+            .baseUrl(props.getBaseUrl())
             .modelName(props.getChatModel())
             .temperature(props.getTemperature())
             .maxTokens(props.getMaxTokens())

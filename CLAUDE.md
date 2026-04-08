@@ -169,6 +169,9 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (MockMvc, `@WebMvcTest`), Jakarta Bean Validation (`@NotBlank`) (007-phase7-controllers)
 - Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (`MockHttpServletRequest`/`MockHttpServletResponse`), Bucket4j (`io.github.bucket4j:bucket4j_jdk17-lettuce`) (008-interceptor-validation)
 - Redis (mocked via `ProxyManager<String>` Mockito mock — no real Redis in unit tests) (008-interceptor-validation)
+- Java 21 + Spring Boot 3.4.2, Testcontainers 1.19.7, WireMock 2.35.2, Awaitility, WebTestClient, @SpringBootTest RANDOM_PORT (011-phase9-integration-tests)
+- PostgreSQL/pgvector (`pgvector/pgvector:pg16`), Redis (`redis:7-alpine`), ClamAV (`clamav/clamav:latest`) — real containers via Testcontainers (011-phase9-integration-tests)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin
+- 011-phase9-integration-tests: Added 5 integration test specs (IngestionPipeline, RetrievalPipeline, StreamingPipeline, FullRagPipeline, RateLimit) with Testcontainers + WireMock infrastructure

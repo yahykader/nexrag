@@ -1,0 +1,157 @@
+# ============================================================================
+# Profil Spring dédié aux tests d'intégration (Phase 9)
+# Activé par @ActiveProfiles("integration-test") dans AbstractIntegrationSpec.
+# Les URLs des conteneurs sont injectées dynamiquement via @DynamicPropertySource.
+# ============================================================================
+
+spring:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+  cache:
+    type: redis
+
+# ============================================================================
+# OpenAI — clé factice, base-url injectée par @DynamicPropertySource (WireMock)
+# ✅ Aligné sur application.yml : openai.api.key (point, pas tiret)
+# ============================================================================
+openai:
+  enabled: true
+  api:
+    key: test-integration-key
+  embedding:
+    model: text-embedding-3-small
+    dimension: 1536
+  chat:
+    model: gpt-4o
+    temperature: 0.7
+    max-tokens: 2000
+    timeout-seconds: 60
+    max-retries: 3
+    log-requests: false
+    log-responses: false
+  whisper:
+    model: whisper-1
+    timeout-seconds: 30
+    default-extension: .webm
+    min-audio-bytes: 100
+
+# ============================================================================
+# Antivirus — activé (ClamAV via Testcontainers), health check désactivé
+# ============================================================================
+antivirus:
+  enabled: false
+  host: localhost
+  port: 3310
+  timeout: 2000        # ✅ 2s max — pas 120s
+  chunk-size: 8192
+  max-file-size: 104857600
+  retry:
+    attempts: 1        # ✅ 1 seule tentative
+    delay-ms: 500
+  health-check:
+    enabled: false
+
+# ============================================================================
+# Rate limiting — seuils réduits pour tests rapides
+# ============================================================================
+rate-limit:
+  upload:
+    requests-per-minute: 3
+  batch:
+    requests-per-minute: 3
+  delete:
+    requests-per-minute: 3
+  search:
+    requests-per-minute: 3
+  default-endpoint:
+    requests-per-minute: 3
+
+# ============================================================================
+# Redis — déduplication
+# ============================================================================
+redis:
+  deduplication:
+    ttl-days: 30
+    key-prefix: "ingestion:hash:"
+
+deduplication:
+  text:
+    enabled: true
+    ttl-days: 30
+    batch-id-scope: false
+
+# ============================================================================
+# Circuit breakers — ouverts immédiatement pour éviter les faux positifs
+# ============================================================================
+resilience4j:
+  circuitbreaker:
+    instances:
+      visionAI:
+        sliding-window-size: 2
+        failure-rate-threshold: 100
+        wait-duration-in-open-state: 1s
+      redis:
+        sliding-window-size: 2
+        failure-rate-threshold: 100
+        wait-duration-in-open-state: 1s
+      clamAV:
+        sliding-window-size: 2
+        failure-rate-threshold: 100
+        wait-duration-in-open-state: 1s
+
+# ============================================================================
+# Embedding
+# ============================================================================
+embedding:
+  text:
+    dimension: 1536
+  image:
+    dimension: 512
+  cache:
+    enabled: false
+  compression:
+    enabled: false
+
+# ============================================================================
+# Cache embeddings
+# ============================================================================
+cache:
+  embeddings:
+    enabled: false
+
+# ============================================================================
+# Websocket
+# ============================================================================
+websocket:
+  allowed-origins:
+    - "http://localhost"
+  inactive-threshold-ms: 3600000
+  cleanup-interval-ms: 3600000
+  stats-interval-ms: 300000
+
+# ============================================================================
+# Logs réduits pour accélérer les tests
+# ============================================================================
+logging:
+  level:
+    root: WARN
+    com.exemple.nexrag: INFO
+    org.testcontainers: WARN
+    com.github.tomakehurst.wiremock: WARN
+    dev.langchain4j: WARN
+    dev.ai4j.openai4j: WARN
+
+management:
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,metrics

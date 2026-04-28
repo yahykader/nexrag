@@ -5,20 +5,15 @@ import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.RegisterExtension;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.containers.wait.strategy.Wait;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.time.Duration;
 import java.util.stream.Collectors;
@@ -31,57 +26,18 @@ import static com.github.tomakehurst.wiremock.client.WireMock.*;
  *
  * <p>SRP : centralise l'infrastructure de test partagée (conteneurs, WireMock, cleanup).
  * <p>OCP : chaque classe fille ajoute ses propres @Test sans modifier cette classe.
- * <p>DIP : les sous-classes reçoivent les beans Spring via injection — pas d'instanciation directe.
+ * <p>DIP : les sous-classes reçoivent les beans Spring via injection.
  *
- * <p>Infrastructure :
- * <ul>
- *   <li>PostgreSQL/pgvector:pg16 — EmbeddingStore</li>
- *   <li>Redis:7-alpine — cache embeddings et déduplication</li>
- *   <li>ClamAV — scan antivirus réel</li>
- *   <li>WireMock — stub des appels OpenAI (embeddings + chat)</li>
- * </ul>
- *
- * <p>Clean code : {@link #truncateEmbeddingTables()} purge Redis ET PostgreSQL avant chaque test.
- *                 Sans la purge Redis, le hash du fichier reste en cache de déduplication entre
- *                 les runs, ce qui déclenche un faux 409 au deuxième run du même contenu.
+ * <p>Singleton Container Pattern : hérite de {@link TestContainers} qui démarre
+ * PostgreSQL, Redis et ClamAV UNE SEULE FOIS pour toute la JVM — plus de
+ * @Testcontainers/@Container qui redémarrent les containers entre les classes.
  *
  * @author ayahyaoui
- * @version 2.0
+ * @version 3.0
  */
-@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("integration-test")
-public abstract class AbstractIntegrationSpec {
-
-    // =========================================================================
-    // Conteneurs partagés (démarrés une seule fois pour toute la JVM de test)
-    // =========================================================================
-
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES =
-        new PostgreSQLContainer<>("pgvector/pgvector:pg16")
-            .withDatabaseName("nexrag_test")
-            .withUsername("test_user")
-            .withPassword("test_pass")
-            .withReuse(true)
-            .withStartupTimeout(Duration.ofMinutes(2));
-
-    @Container
-    @SuppressWarnings("resource")
-    static final GenericContainer<?> REDIS =
-        new GenericContainer<>("redis:7-alpine")
-            .withExposedPorts(6379)
-            .withReuse(true)
-            .withStartupTimeout(Duration.ofSeconds(30));
-
-    @Container
-    @SuppressWarnings("resource")
-    static final GenericContainer<?> CLAMAV =
-        new GenericContainer<>("clamav/clamav:latest")
-            .withExposedPorts(3310)
-            .waitingFor(Wait.forListeningPort())
-            .withReuse(true) 
-            .withStartupTimeout(Duration.ofMinutes(3));
+public abstract class AbstractIntegrationSpec extends TestContainers {
 
     // =========================================================================
     // WireMock — stub des appels OpenAI
@@ -98,7 +54,7 @@ public abstract class AbstractIntegrationSpec {
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL / pgvector
+        // PostgreSQL / pgvector — POSTGRES hérité de TestContainers
         registry.add("spring.datasource.url",      POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username",  POSTGRES::getUsername);
         registry.add("spring.datasource.password",  POSTGRES::getPassword);
@@ -108,19 +64,19 @@ public abstract class AbstractIntegrationSpec {
         registry.add("pgvector.user",     POSTGRES::getUsername);
         registry.add("pgvector.password", POSTGRES::getPassword);
 
-        // Redis
+        // Redis — REDIS hérité de TestContainers
         registry.add("spring.data.redis.host", REDIS::getHost);
         registry.add("spring.data.redis.port", () -> REDIS.getMappedPort(6379));
         registry.add("spring.redis.host",      REDIS::getHost);
         registry.add("spring.redis.port",      () -> REDIS.getMappedPort(6379));
 
-        // ClamAV
-        registry.add("antivirus.host", CLAMAV::getHost);
-        registry.add("antivirus.port", () -> CLAMAV.getMappedPort(3310));
+        // ClamAV — CLAMAV hérité de TestContainers
+        registry.add("antivirus.host",                 CLAMAV::getHost);
+        registry.add("antivirus.port",                 () -> CLAMAV.getMappedPort(3310));
+        registry.add("antivirus.enabled",              () -> "false");
         registry.add("antivirus.timeout",              () -> "1000");
         registry.add("antivirus.retry.attempts",       () -> "0");
         registry.add("antivirus.health-check.enabled", () -> "false");
-        registry.add("antivirus.enabled", () -> "false");
 
         // OpenAI → redirigé vers WireMock
         registry.add("openai.base-url", OPEN_AI_MOCK::baseUrl);
@@ -147,12 +103,6 @@ public abstract class AbstractIntegrationSpec {
     // Setup / Cleanup
     // =========================================================================
 
-    /**
-     * Avant chaque méthode de test :
-     * - Reconfigure WebTestClient sur le port du serveur courant.
-     * - Enregistre les stubs WireMock pour OpenAI.
-     * - Nettoie Redis ET les tables d'embeddings PostgreSQL.
-     */
     @BeforeEach
     void setUpBase() {
         webClient = WebTestClient
@@ -169,10 +119,7 @@ public abstract class AbstractIntegrationSpec {
     // Stubs WireMock (OpenAI)
     // =========================================================================
 
-    /**
-     * Configure les stubs WireMock pour intercepter les appels OpenAI.
-     */
-   protected void configureOpenAiStubs() {
+    protected void configureOpenAiStubs() {
         String embeddingVector = buildEmbeddingVector(1536, 0.1);
 
         // POST /embeddings → vecteur 1536 dimensions
@@ -183,10 +130,10 @@ public abstract class AbstractIntegrationSpec {
                     .withHeader("Content-Type", "application/json")
                     .withBody("""
                         {
-                        "object": "list",
-                        "data": [{"object": "embedding", "embedding": %s, "index": 0}],
-                        "model": "text-embedding-3-small",
-                        "usage": {"prompt_tokens": 10, "total_tokens": 10}
+                          "object": "list",
+                          "data": [{"object": "embedding", "embedding": %s, "index": 0}],
+                          "model": "text-embedding-3-small",
+                          "usage": {"prompt_tokens": 10, "total_tokens": 10}
                         }
                         """.formatted(embeddingVector)))
         );
@@ -209,7 +156,7 @@ public abstract class AbstractIntegrationSpec {
                         "data: [DONE]\n\n"))
         );
 
-        // POST /chat/completions — mode SYNC (QueryTransformer, reranking, etc.)
+        // POST /chat/completions — mode SYNC
         OPEN_AI_MOCK.stubFor(
             post(urlPathEqualTo("/chat/completions"))
                 .willReturn(aResponse()
@@ -217,19 +164,19 @@ public abstract class AbstractIntegrationSpec {
                     .withHeader("Content-Type", "application/json")
                     .withBody("""
                         {
-                        "id": "chatcmpl-test-nexrag",
-                        "object": "chat.completion",
-                        "created": 1700000000,
-                        "model": "gpt-4o",
-                        "choices": [{
+                          "id": "chatcmpl-test-nexrag",
+                          "object": "chat.completion",
+                          "created": 1700000000,
+                          "model": "gpt-4o",
+                          "choices": [{
                             "index": 0,
                             "message": {
-                            "role": "assistant",
-                            "content": "Réponse de test NexRAG."
+                              "role": "assistant",
+                              "content": "Réponse de test NexRAG."
                             },
                             "finish_reason": "stop"
-                        }],
-                        "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}
+                          }],
+                          "usage": {"prompt_tokens": 50, "completion_tokens": 20, "total_tokens": 70}
                         }
                         """))
         );
@@ -240,36 +187,23 @@ public abstract class AbstractIntegrationSpec {
     // =========================================================================
 
     /**
-     * Vide Redis ET les tables d'embeddings pgvector avant chaque test.
-     *
-     * <p>Pourquoi purger Redis : le service de déduplication stocke les hashes en Redis.
-     * Sans cette purge, un fichier ingéré lors d'un premier run est rejeté en 409
-     * (doublon) lors du run suivant, même si PostgreSQL a été vidé. Les deux doivent
-     * être purgés ensemble pour garantir l'isolation entre les tests.
+     * Purge Redis ET pgvector avant chaque test.
+     * Les deux doivent être purgés ensemble pour garantir l'isolation.
      */
     protected void truncateEmbeddingTables() {
-        // ✅ Purger Redis — hashes de déduplication, cache embeddings, buckets rate limit
         try {
             redisTemplate.getConnectionFactory()
                 .getConnection()
                 .serverCommands()
                 .flushDb();
-        } catch (Exception ignored) {
-            // Redis peut ne pas être disponible au premier appel
-        }
+        } catch (Exception ignored) {}
 
-        // Vider les tables pgvector
         try {
             jdbcTemplate.execute("TRUNCATE TABLE text_embeddings RESTART IDENTITY CASCADE");
             jdbcTemplate.execute("TRUNCATE TABLE image_embeddings RESTART IDENTITY CASCADE");
-        } catch (Exception ignored) {
-            // Les tables sont créées par LangChain4j à l'initialisation — peuvent ne pas exister encore
-        }
+        } catch (Exception ignored) {}
     }
 
-    /**
-     * Compte les embeddings dans la table text_embeddings.
-     */
     protected int countTextEmbeddings() {
         try {
             Integer count = jdbcTemplate.queryForObject(
@@ -284,18 +218,11 @@ public abstract class AbstractIntegrationSpec {
     // Utilitaires — contenu de fichiers pour les tests
     // =========================================================================
 
-    /**
-     * Contenu EICAR standard — reconnu par ClamAV comme virus de test.
-     */
     protected static byte[] eicarContent() {
         return "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*"
             .getBytes(java.nio.charset.StandardCharsets.US_ASCII);
     }
 
-    /**
-     * PDF minimal valide avec contenu unique par run (évite les collisions de hash Redis).
-     * Le timestamp nano garantit un hash différent à chaque exécution.
-     */
     protected static byte[] minimalPdfContent() {
         String pdf = "%PDF-1.4\n" +
             "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n" +
@@ -306,15 +233,12 @@ public abstract class AbstractIntegrationSpec {
             "BT /F1 12 Tf 100 700 Td (NexRAG integration test document RAG pipeline page 1) Tj ET\n" +
             "endstream\nendobj\n" +
             "5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n" +
-            "%% unique-run-id: " + System.nanoTime() + "\n" +   // ✅ hash unique par run
+            "%% unique-run-id: " + System.nanoTime() + "\n" +
             "xref\n0 6\n0000000000 65535 f \n" +
             "trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n0\n%%EOF";
         return pdf.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);
     }
 
-    /**
-     * Texte brut pour les tests DOCX/XLSX (parsé par Tika en fallback).
-     */
     protected static byte[] minimalTextContent() {
         return ("NexRAG integration test document. " +
                 "Ce document contient du texte pour les tests d'ingestion DOCX et XLSX. " +
@@ -322,9 +246,6 @@ public abstract class AbstractIntegrationSpec {
             .getBytes(java.nio.charset.StandardCharsets.UTF_8);
     }
 
-    /**
-     * PNG 1×1 pixel blanc minimal valide.
-     */
     protected static byte[] minimalPngContent() {
         return java.util.Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg=="

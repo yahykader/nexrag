@@ -1,0 +1,392 @@
+Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8
+[INFO] Scanning for projects...
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective model for com.exemple:nex-rag:jar:0.0.1-SNAPSHOT
+[WARNING] 'build.plugins.plugin.(groupId:artifactId)' must be unique but found duplicate declaration of plugin org.springframework.boot:spring-boot-maven-plugin @ line 479, column 21
+[WARNING] 
+[WARNING] It is highly recommended to fix these problems because they threaten the stability of your build.
+[WARNING] 
+[WARNING] For this reason, future Maven versions might no longer support building such malformed projects.
+[WARNING] 
+[INFO] 
+[INFO] ------------------------< com.exemple:nex-rag >-------------------------
+[INFO] Building NexRAG 0.0.1-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- jacoco:0.8.12:prepare-agent (prepare-agent) @ nex-rag ---
+[INFO] argLine set to -javaagent:C:\\Users\\abdel\\.m2\\repository\\org\\jacoco\\org.jacoco.agent\\0.8.12\\org.jacoco.agent-0.8.12-runtime.jar=destfile=D:\\Formation-DATA-2024\\IA-Genrative\\TP\\NexRAG\\nex-rag\\target\\jacoco.exec
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ nex-rag ---
+[INFO] Copying 2 resources from src\main\resources to target\classes
+[INFO] Copying 0 resource from src\main\resources to target\classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ nex-rag ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 201 source files with javac [debug parameters release 21] to target\classes
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/retrieval/query/QueryTransformerService.java:[151,36] generate(java.lang.String) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/retrieval/retriever/TextVectorRetriever.java:[52,34] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/retrieval/retriever/ImageVectorRetriever.java:[49,35] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestrator.java:[440,27] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzer.java:[175,35] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/ingestion/strategy/TikaIngestionStrategy.java:[362,30] get(java.lang.String) in dev.langchain4j.data.document.Metadata has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/ingestion/strategy/TikaIngestionStrategy.java:[370,30] get(java.lang.String) in dev.langchain4j.data.document.Metadata has been deprecated and marked for removal
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/config/RateLimitConfig.java: Some input files use or override a deprecated API.
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/config/RateLimitConfig.java: Recompile with -Xlint:deprecation for details.
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/streaming/openai/OpenAiStreamingClient.java: D:\Formation-DATA-2024\IA-Genrative\TP\NexRAG\nex-rag\src\main\java\com\exemple\nexrag\service\rag\streaming\openai\OpenAiStreamingClient.java uses unchecked or unsafe operations.
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/main/java/com/exemple/nexrag/service/rag/streaming/openai/OpenAiStreamingClient.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ nex-rag ---
+[INFO] Copying 10 resources from src\test\resources to target\test-classes
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ nex-rag ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 88 source files with javac [debug parameters release 21] to target\test-classes
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalCrudControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalCrudControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalCrudControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalCrudControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalCrudControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalIngestionControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalIngestionControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalIngestionControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalIngestionControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/MultimodalIngestionControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/StreamingAssistantControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/StreamingAssistantControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/StreamingAssistantControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/StreamingAssistantControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/StreamingAssistantControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/VoiceControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/VoiceControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/VoiceControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/VoiceControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/VoiceControllerSpec.java:[42,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/WebSocketStatsControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/WebSocketStatsControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/WebSocketStatsControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/WebSocketStatsControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/controller/WebSocketStatsControllerSpec.java:[40,6] org.springframework.boot.test.mock.mockito.MockBean in org.springframework.boot.test.mock.mockito has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[59,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[72,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[85,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[89,28] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[101,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[125,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[137,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[152,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[164,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/ingestion/analyzer/VisionAnalyzerSpec.java:[193,25] generate(dev.langchain4j.data.message.ChatMessage...) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/query/QueryTransformerServiceSpec.java:[144,23] generate(java.lang.String) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/query/QueryTransformerServiceSpec.java:[165,23] generate(java.lang.String) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/query/QueryTransformerServiceSpec.java:[187,23] generate(java.lang.String) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/query/QueryTransformerServiceSpec.java:[208,23] generate(java.lang.String) in dev.langchain4j.model.chat.ChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/ImageVectorRetrieverSpec.java:[71,24] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/ImageVectorRetrieverSpec.java:[95,24] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/ImageVectorRetrieverSpec.java:[115,24] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/TextVectorRetrieverSpec.java:[72,23] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/TextVectorRetrieverSpec.java:[96,23] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/TextVectorRetrieverSpec.java:[125,23] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/TextVectorRetrieverSpec.java:[149,23] findRelevant(dev.langchain4j.data.embedding.Embedding,int) in dev.langchain4j.store.embedding.EmbeddingStore has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestratorSpec.java:[105,39] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestratorSpec.java:[123,31] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestratorSpec.java:[148,39] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestratorSpec.java:[189,31] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestratorSpec.java:[210,32] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestratorSpec.java:[261,32] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[WARNING] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/streaming/StreamingOrchestratorSpec.java:[316,32] generate(dev.langchain4j.data.message.UserMessage,dev.langchain4j.model.StreamingResponseHandler<dev.langchain4j.data.message.AiMessage>) in dev.langchain4j.model.chat.StreamingChatLanguageModel has been deprecated and marked for removal
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/BM25RetrieverSpec.java: D:\Formation-DATA-2024\IA-Genrative\TP\NexRAG\nex-rag\src\test\java\com\exemple\nexrag\service\rag\retrieval\retriever\BM25RetrieverSpec.java uses or overrides a deprecated API.
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/retrieval/retriever/BM25RetrieverSpec.java: Recompile with -Xlint:deprecation for details.
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/interceptor/RateLimitServiceSpec.java: Some input files use unchecked or unsafe operations.
+[INFO] /D:/Formation-DATA-2024/IA-Genrative/TP/NexRAG/nex-rag/src/test/java/com/exemple/nexrag/service/rag/interceptor/RateLimitServiceSpec.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.5.2:test (default-test) @ nex-rag ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+Picked up JAVA_TOOL_OPTIONS: -Dfile.encoding=UTF-8 -Dsun.jnu.encoding=UTF-8
+18:36:14.731 [main] INFO org.testcontainers.images.PullPolicy -- Image pull policy will be performed by: DefaultPullPolicy()
+18:36:14.751 [main] INFO org.testcontainers.utility.ImageNameSubstitutor -- Image name substitution will be performed by: DefaultImageNameSubstitutor (composite of 'ConfigurationFileImageNameSubstitutor' and 'PrefixingImageNameSubstitutor')
+18:36:16.712 [testcontainers-lifecycle-0] INFO org.testcontainers.dockerclient.DockerClientProviderStrategy -- Found Docker environment with Environment variables, system properties and defaults. Resolved dockerHost=tcp://127.0.0.1:2375
+18:36:16.718 [testcontainers-lifecycle-0] INFO org.testcontainers.DockerClientFactory -- Docker host IP address is 127.0.0.1
+18:36:16.803 [testcontainers-lifecycle-0] INFO org.testcontainers.DockerClientFactory -- Connected to docker: 
+  Server Version: 27.3.1
+  API Version: 1.47
+  Operating System: Docker Desktop
+  Total Memory: 15938 MB
+18:36:16.837 [testcontainers-lifecycle-0] INFO org.testcontainers.DockerClientFactory -- Checking the system...
+18:36:16.840 [testcontainers-lifecycle-0] INFO org.testcontainers.DockerClientFactory -- ✔︎ Docker server version should be at least 1.6.0
+18:36:17.186 [testcontainers-lifecycle-2] INFO tc.clamav/clamav:latest -- Creating container for image: clamav/clamav:latest
+18:36:17.186 [testcontainers-lifecycle-0] INFO tc.pgvector/pgvector:pg16 -- Creating container for image: pgvector/pgvector:pg16
+18:36:17.186 [testcontainers-lifecycle-1] INFO tc.redis:7-alpine -- Creating container for image: redis:7-alpine
+18:36:17.836 [testcontainers-lifecycle-0] INFO org.testcontainers.utility.RegistryAuthLocator -- Credential helper/store (docker-credential-desktop) does not have credentials for https://index.docker.io/v1/
+18:36:18.413 [testcontainers-lifecycle-2] INFO tc.clamav/clamav:latest -- Reusing container with ID: 48995f7d8d35e6ed14196f5e0fa9fcfe2f44a77ddda0c6e459dc6509f5b9f4c0 and hash: df81abc64fbc039cd2496c262f1562a070285e9a
+18:36:18.413 [testcontainers-lifecycle-0] INFO tc.pgvector/pgvector:pg16 -- Reusing container with ID: 760d335eba5241e565f70118498c64b520e1570eda3be92001053a667fc2107f and hash: c8a06846b7cdfa5d8153392a47ce27f854f35f4e
+18:36:18.417 [testcontainers-lifecycle-2] INFO tc.clamav/clamav:latest -- Reusing existing container (48995f7d8d35e6ed14196f5e0fa9fcfe2f44a77ddda0c6e459dc6509f5b9f4c0) and not creating a new one
+18:36:18.417 [testcontainers-lifecycle-0] INFO tc.pgvector/pgvector:pg16 -- Reusing existing container (760d335eba5241e565f70118498c64b520e1570eda3be92001053a667fc2107f) and not creating a new one
+18:36:18.468 [testcontainers-lifecycle-1] INFO tc.redis:7-alpine -- Reusing container with ID: 6651c07dbe8d6886e2e50d281fc3dbec22387df6d55d018aa11a46acfddec004 and hash: 45e1305010675dd42bf73e32c71181adf9cf2541
+18:36:18.468 [testcontainers-lifecycle-1] INFO tc.redis:7-alpine -- Reusing existing container (6651c07dbe8d6886e2e50d281fc3dbec22387df6d55d018aa11a46acfddec004) and not creating a new one
+18:36:18.939 [testcontainers-lifecycle-0] INFO tc.pgvector/pgvector:pg16 -- Container pgvector/pgvector:pg16 started in PT1.7533566S
+18:36:18.943 [testcontainers-lifecycle-0] INFO tc.pgvector/pgvector:pg16 -- Container is started (JDBC URL: jdbc:postgresql://127.0.0.1:56363/nexrag_test?loggerLevel=OFF)
+18:36:19.048 [testcontainers-lifecycle-1] INFO tc.redis:7-alpine -- Container redis:7-alpine started in PT1.8622917S
+18:36:19.048 [testcontainers-lifecycle-2] INFO tc.clamav/clamav:latest -- Container clamav/clamav:latest started in PT1.8622917S
+[INFO] Running com.exemple.nexrag.service.rag.integration.IngestionPipelineIntegrationSpec
+18:36:19.698 [main] INFO org.springframework.test.context.support.AnnotationConfigContextLoaderUtils -- Could not detect default configuration classes for test class [com.exemple.nexrag.service.rag.integration.IngestionPipelineIntegrationSpec]: IngestionPipelineIntegrationSpec does not declare any static, non-private, non-final, nested classes annotated with @Configuration.
+18:36:20.195 [main] INFO org.springframework.boot.test.context.SpringBootTestContextBootstrapper -- Found @SpringBootConfiguration com.exemple.nexrag.NexRAGApplication for test class com.exemple.nexrag.service.rag.integration.IngestionPipelineIntegrationSpec
+
+  .   ____          _            __ _ _
+ /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
+( ( )\___ | '_ | '_| | '_ \/ _` | \ \ \ \
+ \\/  ___)| |_)| | | | | || (_| |  ) ) ) )
+  '  |____| .__|_| |_|_| |_\__, | / / / /
+ =========|_|==============|___/=/_/_/_/
+
+ :: Spring Boot ::                (v3.4.2)
+
+18:36:23.425 [main] INFO  c.e.n.s.r.i.IngestionPipelineIntegrationSpec - Starting IngestionPipelineIntegrationSpec using Java 21.0.9 with PID 38768 (started by abdel in D:\Formation-DATA-2024\IA-Genrative\TP\NexRAG\nex-rag)
+18:36:23.429 [main] INFO  c.e.n.s.r.i.IngestionPipelineIntegrationSpec - The following 1 profile is active: "integration-test"
+18:36:28.849 [main] DEBUG i.g.r.s.u.RxJava2OnClasspathCondition - RxJava2 related Aspect extensions are not activated because Resilience4j RxJava2 module is not on the classpath.
+18:36:28.853 [main] DEBUG i.g.r.s.u.ReactorOnClasspathCondition - Reactor related Aspect extensions are not activated because Resilience4j Reactor module is not on the classpath.
+18:36:28.868 [main] DEBUG i.g.r.s.u.RxJava2OnClasspathCondition - RxJava2 related Aspect extensions are not activated because Resilience4j RxJava2 module is not on the classpath.
+18:36:28.868 [main] DEBUG i.g.r.s.u.ReactorOnClasspathCondition - Reactor related Aspect extensions are not activated because Resilience4j Reactor module is not on the classpath.
+18:36:28.921 [main] DEBUG i.g.r.s.u.RxJava2OnClasspathCondition - RxJava2 related Aspect extensions are not activated because Resilience4j RxJava2 module is not on the classpath.
+18:36:28.921 [main] DEBUG i.g.r.s.u.ReactorOnClasspathCondition - Reactor related Aspect extensions are not activated because Resilience4j Reactor module is not on the classpath.
+18:36:28.965 [main] DEBUG i.g.r.s.u.RxJava2OnClasspathCondition - RxJava2 related Aspect extensions are not activated because Resilience4j RxJava2 module is not on the classpath.
+18:36:28.967 [main] DEBUG i.g.r.s.u.ReactorOnClasspathCondition - Reactor related Aspect extensions are not activated because Resilience4j Reactor module is not on the classpath.
+18:36:28.998 [main] DEBUG i.g.r.s.u.RxJava2OnClasspathCondition - RxJava2 related Aspect extensions are not activated because Resilience4j RxJava2 module is not on the classpath.
+18:36:28.998 [main] DEBUG i.g.r.s.u.ReactorOnClasspathCondition - Reactor related Aspect extensions are not activated because Resilience4j Reactor module is not on the classpath.
+18:36:29.027 [main] DEBUG i.g.r.s.u.RxJava2OnClasspathCondition - RxJava2 related Aspect extensions are not activated because Resilience4j RxJava2 module is not on the classpath.
+18:36:29.027 [main] DEBUG i.g.r.s.u.ReactorOnClasspathCondition - Reactor related Aspect extensions are not activated because Resilience4j Reactor module is not on the classpath.
+18:36:37.690 [main] WARN  org.hibernate.orm.deprecation - HHH90000025: PostgreSQLDialect does not need to be specified explicitly using 'hibernate.dialect' (remove the property setting and it will be selected by default)
+18:36:39.235 [main] INFO  c.e.n.c.v.ConfigurationValidator - 🔧 Validation de la configuration...
+18:36:39.235 [main] INFO  c.e.n.c.v.ConfigurationValidator - ✅ OpenAI configuré : key=sk-proj...DiQA, embeddingModel=text-embedding-3-small, chatModel=gpt-4o
+18:36:39.235 [main] INFO  c.e.n.c.v.ConfigurationValidator - 🔌 Test connexion PgVector : jdbc:postgresql://127.0.0.1:56363/nexrag_test
+18:36:39.273 [main] INFO  c.e.n.c.v.ConfigurationValidator - ✅ PgVector connecté : host=127.0.0.1:56363, database=nexrag_test
+18:36:39.274 [main] INFO  c.e.n.c.v.ConfigurationValidator - ✅ Configuration validée avec succès
+18:36:40.612 [main] INFO  c.e.nexrag.config.RateLimitConfig - ✅ Rate Limiting activé (Redis: 127.0.0.1:56357)
+18:36:40.624 [main] INFO  c.e.nexrag.config.RateLimitConfig - 📊 Limites — upload=3 batch=3 delete=3 search=3 default=3
+18:36:41.066 [main] INFO  c.e.n.d.d.t.TextDeduplicationProperties - ✅ TextDeduplication — enabled=true, ttlDays=30, batchIdScope=false
+🚀🚀🚀 MetricsService CONSTRUCTOR CALLED 🚀🚀🚀
+Registry class: io.micrometer.core.instrument.simple.SimpleMeterRegistry
+✅✅✅ MetricsService INITIALIZED ✅✅✅
+Registered meters: 40
+18:36:41.282 [main] INFO  c.exemple.nexrag.config.RedisConfig - ✅ Redis ConnectionFactory démarrée: 127.0.0.1:56357 (db: 0)
+18:36:41.501 [main] INFO  c.exemple.nexrag.config.RedisConfig - ✅ RedisTemplate<String, Object> (JSON) configuré
+18:36:41.582 [main] INFO  c.e.n.service.rag.metrics.RAGMetrics - ✅ RAGMetrics initialisé — monitoring complet actif
+18:36:41.610 [main] INFO  c.e.n.s.r.c.MetricsController - ✅ MetricsController initialisé (prometheus=absent)
+18:36:41.632 [main] INFO  c.e.n.config.PgVectorStoreConfig - 📚 Création textEmbeddingStore — table=text_embeddings
+18:36:41.743 [main] INFO  c.e.n.config.PgVectorStoreConfig - 🖼️ Création imageEmbeddingStore — table=image_embeddings
+18:36:41.874 [main] INFO  c.exemple.nexrag.config.RedisConfig - ✅ RedisTemplate<String, String> configuré
+18:36:41.978 [main] INFO  c.e.n.s.r.i.r.EmbeddingRepository - ✅ EmbeddingRepository initialisé
+18:36:42.070 [main] INFO  c.e.nexrag.config.OpenAiModelConfig - 🤖 Création ChatLanguageModel — model=gpt-4o, temperature=0.7
+18:36:42.866 [main] INFO  c.e.n.c.CircuitBreakerConfiguration - ✅ CircuitBreakerRegistry initialisé avec 0 configurations
+18:36:42.979 [main] INFO  c.e.n.v.FileSignatureValidator - ✅ FileSignatureValidator initialisé - 23 signatures enregistrées
+18:36:42.996 [main] INFO  c.e.nexrag.config.OpenAiModelConfig - 🧠 Création EmbeddingModel — model=text-embedding-3-small, dimension=1536
+18:36:43.146 [main] INFO  c.e.n.s.r.i.s.DocxIngestionStrategy - ✅ [DOCX] Strategy initialisée
+18:36:43.259 [main] INFO  c.e.nexrag.config.WebSocketConfig - ✅ Message broker configuré : /topic, /queue, /app
+18:36:43.339 [main] INFO  c.e.n.s.r.i.s.ImageIngestionStrategy - ✅ [IMAGE] Strategy initialisée avec streaming + tracking batch
+18:36:43.362 [main] INFO  c.e.n.s.r.i.s.PdfIngestionStrategy - ✅ [PDF] Strategy initialisée
+18:36:43.385 [main] INFO  c.e.n.s.r.i.s.TextIngestionStrategy - ✅ [TEXT] Strategy initialisée (40+ formats)
+18:36:43.421 [main] INFO  c.e.n.s.r.i.s.TikaIngestionStrategy - ✅ [TIKA] Strategy initialisée (fallback 1000+ formats)
+18:36:43.535 [main] INFO  c.e.n.s.r.i.s.XlsxIngestionStrategy - ✅ [XLSX] Strategy initialisée (detectCharts=true, evaluateFormulas=true)
+18:36:43.568 [main] INFO  c.e.n.s.r.i.s.AntivirusScanner - 📡 AntivirusScanner initialisé — enabled=false, host=127.0.0.1:56368, timeout=1000ms
+18:36:43.568 [main] INFO  c.exemple.nexrag.config.ClamAvConfig - 🦠 ClamAV désactivé (antivirus.enabled=false)
+18:36:43.574 [main] INFO  c.e.n.s.r.i.IngestionOrchestrator - ✅ IngestionOrchestrator initialisé — 6 stratégies | antivirus: OFF
+18:36:43.725 [main] INFO  c.e.n.s.r.r.r.ParallelRetrieverService - ✅ ParallelRetrieverService initialisé avec 3 retrievers
+18:36:43.743 [main] INFO  c.e.n.s.r.r.r.CrossEncoderReranker - ✅ CrossEncoderReranker initialisé (model: cross-encoder/ms-marco-MiniLM-L-6-v2)
+18:36:43.769 [main] INFO  c.e.n.s.r.r.RetrievalAugmentorOrchestrator - ✅ RetrievalAugmentorOrchestrator initialisé avec RAGMetrics
+18:36:43.828 [main] INFO  c.e.nexrag.config.OpenAiModelConfig - 🌊 Création StreamingChatLanguageModel — model=gpt-4o
+18:36:44.059 [main] INFO  c.e.n.s.rag.voice.WhisperService - ✅ [Whisper] Service initialisé (timeout=30s, model=whisper-1)
+18:36:45.705 [main] INFO  c.e.n.s.r.s.o.OpenAiStreamingClient - ✅ OpenAiStreamingClient initialized (model: gpt-4o)
+18:36:45.738 [main] INFO  c.exemple.nexrag.config.AsyncConfig - ✅ ThreadPool Ingestion configuré: core=4 max=8 queue=50
+18:36:45.738 [main] INFO  c.exemple.nexrag.config.AsyncConfig - ✅ ThreadPool Low Priority configuré
+18:36:45.755 [main] INFO  c.e.n.c.CircuitBreakerConfiguration - ✅ [CircuitBreaker] Nouveau circuit breaker ajouté: visionAI
+18:36:45.786 [main] INFO  c.e.n.c.CircuitBreakerConfiguration - ✅ [CircuitBreaker] Nouveau circuit breaker ajouté: redis
+18:36:45.787 [main] INFO  c.e.n.c.CircuitBreakerConfiguration - ✅ [CircuitBreaker] Nouveau circuit breaker ajouté: clamAV
+18:36:45.819 [main] INFO  c.exemple.nexrag.config.RedisConfig - ✅ CacheManager Redis configuré (TTL: 24h)
+18:36:45.852 [main] INFO  c.exemple.nexrag.config.RetryConfig - ✅ RetryTemplate configuré: maxAttempts=3, backoff=exponential(1s, x2)
+18:36:45.869 [main] INFO  c.exemple.nexrag.config.RetryConfig - ✅ ExternalApiRetryTemplate configuré: maxAttempts=3, backoff=exponential(2s, x2.5)
+18:36:45.904 [main] INFO  c.e.nexrag.config.WebSocketConfig - ✅ Raw WebSocket handler enregistré : /ws/assistant (natif + SockJS)
+18:36:46.064 [main] INFO  c.e.nexrag.config.WebSocketConfig - ✅ STOMP endpoints enregistrés : /ws (natif + SockJS)
+18:36:46.518 [main] WARN  o.s.b.a.o.j.JpaBaseConfiguration$JpaWebConfiguration - spring.jpa.open-in-view is enabled by default. Therefore, database queries may be performed during view rendering. Explicitly configure spring.jpa.open-in-view to disable this warning
+18:36:46.973 [main] INFO  c.e.n.s.r.i.c.EmbeddingCacheConfig - ✅ embeddingCacheRedisTemplate configuré (JSON sans type metadata)
+18:36:47.027 [main] INFO  c.e.n.s.r.i.c.EmbeddingCompressor - 🔓 Compression embeddings désactivée
+18:36:47.058 [main] INFO  c.e.n.s.r.i.strategy.IngestionConfig - 📋 [Ingestion] Strategy enregistrée : PDF (priorité=1)
+18:36:47.058 [main] INFO  c.e.n.s.r.i.strategy.IngestionConfig - 📋 [Ingestion] Strategy enregistrée : DOCX (priorité=2)
+18:36:47.058 [main] INFO  c.e.n.s.r.i.strategy.IngestionConfig - 📋 [Ingestion] Strategy enregistrée : XLSX (priorité=3)
+18:36:47.058 [main] INFO  c.e.n.s.r.i.strategy.IngestionConfig - 📋 [Ingestion] Strategy enregistrée : IMAGE (priorité=4)
+18:36:47.060 [main] INFO  c.e.n.s.r.i.strategy.IngestionConfig - 📋 [Ingestion] Strategy enregistrée : TEXT (priorité=8)
+18:36:47.060 [main] INFO  c.e.n.s.r.i.strategy.IngestionConfig - 📋 [Ingestion] Strategy enregistrée : TIKA (priorité=10)
+18:36:47.491 [main] INFO  c.exemple.nexrag.config.WebMvcConfig - ✅ RateLimitInterceptor enregistré sur /api/v1/ingestion/**, /api/v1/crud/**
+18:36:48.479 [main] WARN  c.g.c.s.c.DefaultCredentialsProvider - No core credentials are set. Service-specific credentials (e.g., spring.cloud.gcp.pubsub.credentials.*) should be used if your app uses services that require credentials.
+java.io.IOException: Your default credentials were not found. To set up Application Default Credentials for your environment, see https://cloud.google.com/docs/authentication/external/set-up-adc.
+	at com.google.auth.oauth2.DefaultCredentialsProvider.getDefaultCredentials(DefaultCredentialsProvider.java:127)
+	at com.google.auth.oauth2.GoogleCredentials.getApplicationDefault(GoogleCredentials.java:129)
+	at com.google.auth.oauth2.GoogleCredentials.getApplicationDefault(GoogleCredentials.java:101)
+	at com.google.api.gax.core.GoogleCredentialsProvider.getCredentials(GoogleCredentialsProvider.java:70)
+	at com.google.cloud.spring.core.DefaultCredentialsProvider.<init>(DefaultCredentialsProvider.java:101)
+	at com.google.cloud.spring.autoconfigure.core.GcpContextAutoConfiguration.googleCredentials(GcpContextAutoConfiguration.java:56)
+	at java.base/jdk.internal.reflect.DirectMethodHandleAccessor.invoke(DirectMethodHandleAccessor.java:103)
+	at java.base/java.lang.reflect.Method.invoke(Method.java:580)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.lambda$instantiate$0(SimpleInstantiationStrategy.java:171)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiateWithFactoryMethod(SimpleInstantiationStrategy.java:88)
+	at org.springframework.beans.factory.support.SimpleInstantiationStrategy.instantiate(SimpleInstantiationStrategy.java:168)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiate(ConstructorResolver.java:653)
+	at org.springframework.beans.factory.support.ConstructorResolver.instantiateUsingFactoryMethod(ConstructorResolver.java:489)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.instantiateUsingFactoryMethod(AbstractAutowireCapableBeanFactory.java:1361)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBeanInstance(AbstractAutowireCapableBeanFactory.java:1191)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.doCreateBean(AbstractAutowireCapableBeanFactory.java:563)
+	at org.springframework.beans.factory.support.AbstractAutowireCapableBeanFactory.createBean(AbstractAutowireCapableBeanFactory.java:523)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.lambda$doGetBean$0(AbstractBeanFactory.java:336)
+	at org.springframework.beans.factory.support.DefaultSingletonBeanRegistry.getSingleton(DefaultSingletonBeanRegistry.java:307)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.doGetBean(AbstractBeanFactory.java:334)
+	at org.springframework.beans.factory.support.AbstractBeanFactory.getBean(AbstractBeanFactory.java:199)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.instantiateSingleton(DefaultListableBeanFactory.java:1122)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingleton(DefaultListableBeanFactory.java:1093)
+	at org.springframework.beans.factory.support.DefaultListableBeanFactory.preInstantiateSingletons(DefaultListableBeanFactory.java:1030)
+	at org.springframework.context.support.AbstractApplicationContext.finishBeanFactoryInitialization(AbstractApplicationContext.java:987)
+	at org.springframework.context.support.AbstractApplicationContext.refresh(AbstractApplicationContext.java:627)
+	at org.springframework.boot.web.servlet.context.ServletWebServerApplicationContext.refresh(ServletWebServerApplicationContext.java:146)
+	at org.springframework.boot.SpringApplication.refresh(SpringApplication.java:752)
+	at org.springframework.boot.SpringApplication.refreshContext(SpringApplication.java:439)
+	at org.springframework.boot.SpringApplication.run(SpringApplication.java:318)
+	at org.springframework.boot.test.context.SpringBootContextLoader.lambda$loadContext$3(SpringBootContextLoader.java:137)
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:58)
+	at org.springframework.util.function.ThrowingSupplier.get(ThrowingSupplier.java:46)
+	at org.springframework.boot.SpringApplication.withHook(SpringApplication.java:1461)
+	at org.springframework.boot.test.context.SpringBootContextLoader$ContextLoaderHook.run(SpringBootContextLoader.java:553)
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:137)
+	at org.springframework.boot.test.context.SpringBootContextLoader.loadContext(SpringBootContextLoader.java:108)
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContextInternal(DefaultCacheAwareContextLoaderDelegate.java:225)
+	at org.springframework.test.context.cache.DefaultCacheAwareContextLoaderDelegate.loadContext(DefaultCacheAwareContextLoaderDelegate.java:152)
+	at org.springframework.test.context.support.DefaultTestContext.getApplicationContext(DefaultTestContext.java:130)
+	at org.springframework.test.context.support.DependencyInjectionTestExecutionListener.injectDependencies(DependencyInjectionTestExecutionListener.java:142)
+	at org.springframework.test.context.support.DependencyInjectionTestExecutionListener.prepareTestInstance(DependencyInjectionTestExecutionListener.java:98)
+	at org.springframework.test.context.TestContextManager.prepareTestInstance(TestContextManager.java:260)
+	at org.springframework.test.context.junit.jupiter.SpringExtension.postProcessTestInstance(SpringExtension.java:160)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$11(ClassBasedTestDescriptor.java:378)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.executeAndMaskThrowable(ClassBasedTestDescriptor.java:383)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$invokeTestInstancePostProcessors$12(ClassBasedTestDescriptor.java:378)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.accept(ForEachOps.java:184)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.stream.ReferencePipeline$2$1.accept(ReferencePipeline.java:179)
+	at java.base/java.util.stream.ReferencePipeline$3$1.accept(ReferencePipeline.java:197)
+	at java.base/java.util.ArrayList$ArrayListSpliterator.forEachRemaining(ArrayList.java:1708)
+	at java.base/java.util.stream.AbstractPipeline.copyInto(AbstractPipeline.java:509)
+	at java.base/java.util.stream.AbstractPipeline.wrapAndCopyInto(AbstractPipeline.java:499)
+	at java.base/java.util.stream.ForEachOps$ForEachOp.evaluateSequential(ForEachOps.java:151)
+	at java.base/java.util.stream.ForEachOps$ForEachOp$OfRef.evaluateSequential(ForEachOps.java:174)
+	at java.base/java.util.stream.AbstractPipeline.evaluate(AbstractPipeline.java:234)
+	at java.base/java.util.stream.ReferencePipeline.forEach(ReferencePipeline.java:596)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.invokeTestInstancePostProcessors(ClassBasedTestDescriptor.java:377)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$instantiateAndPostProcessTestInstance$7(ClassBasedTestDescriptor.java:290)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.instantiateAndPostProcessTestInstance(ClassBasedTestDescriptor.java:289)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$5(ClassBasedTestDescriptor.java:279)
+	at java.base/java.util.Optional.orElseGet(Optional.java:364)
+	at org.junit.jupiter.engine.descriptor.ClassBasedTestDescriptor.lambda$testInstancesProvider$6(ClassBasedTestDescriptor.java:278)
+	at org.junit.jupiter.engine.execution.TestInstancesProvider.getTestInstances(TestInstancesProvider.java:31)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.lambda$prepare$1(TestMethodTestDescriptor.java:105)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:104)
+	at org.junit.jupiter.engine.descriptor.TestMethodTestDescriptor.prepare(TestMethodTestDescriptor.java:68)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$prepare$2(NodeTestTask.java:128)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.prepare(NodeTestTask.java:128)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:95)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at java.base/java.util.ArrayList.forEach(ArrayList.java:1596)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.invokeAll(SameThreadHierarchicalTestExecutorService.java:41)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$6(NodeTestTask.java:160)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$8(NodeTestTask.java:146)
+	at org.junit.platform.engine.support.hierarchical.Node.around(Node.java:137)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.lambda$executeRecursively$9(NodeTestTask.java:144)
+	at org.junit.platform.engine.support.hierarchical.ThrowableCollector.execute(ThrowableCollector.java:73)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.executeRecursively(NodeTestTask.java:143)
+	at org.junit.platform.engine.support.hierarchical.NodeTestTask.execute(NodeTestTask.java:100)
+	at org.junit.platform.engine.support.hierarchical.SameThreadHierarchicalTestExecutorService.submit(SameThreadHierarchicalTestExecutorService.java:35)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestExecutor.execute(HierarchicalTestExecutor.java:57)
+	at org.junit.platform.engine.support.hierarchical.HierarchicalTestEngine.execute(HierarchicalTestEngine.java:54)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:198)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:169)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:93)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.lambda$execute$0(EngineExecutionOrchestrator.java:58)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.withInterceptedStreams(EngineExecutionOrchestrator.java:141)
+	at org.junit.platform.launcher.core.EngineExecutionOrchestrator.execute(EngineExecutionOrchestrator.java:57)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:103)
+	at org.junit.platform.launcher.core.DefaultLauncher.execute(DefaultLauncher.java:85)
+	at org.junit.platform.launcher.core.DelegatingLauncher.execute(DelegatingLauncher.java:47)
+	at org.apache.maven.surefire.junitplatform.LazyLauncher.execute(LazyLauncher.java:56)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.execute(JUnitPlatformProvider.java:184)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invokeAllTests(JUnitPlatformProvider.java:148)
+	at org.apache.maven.surefire.junitplatform.JUnitPlatformProvider.invoke(JUnitPlatformProvider.java:122)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+18:36:51.080 [main] INFO  org.springframework.web.SimpLogging - Starting...
+18:36:51.080 [main] INFO  org.springframework.web.SimpLogging - BrokerAvailabilityEvent[available=true, SimpleBrokerMessageHandler [org.springframework.messaging.simp.broker.DefaultSubscriptionRegistry@20e3559f]]
+18:36:51.082 [main] INFO  org.springframework.web.SimpLogging - Started.
+18:36:51.162 [main] INFO  c.e.n.s.r.i.IngestionPipelineIntegrationSpec - Started IngestionPipelineIntegrationSpec in 28.792 seconds (process running for 38.966)
+18:36:51.212 [MessageBroker-3] INFO  c.e.n.websocket.WebSocketCleanupTask - 🧹 Démarrage nettoyage des sessions WebSocket inactives...
+18:36:51.214 [MessageBroker-1] INFO  c.e.n.websocket.WebSocketCleanupTask - 📊 WebSocket — actives: 0 | total: 0 | moy. msg/session: 0,00 | moy. durée: 0ms
+18:36:51.214 [MessageBroker-3] INFO  c.e.n.websocket.WebSocketCleanupTask - 🧹 Nettoyage terminé : 0 supprimées, 0 restantes
+Mockito is currently self-attaching to enable the inline-mock-maker. This will no longer work in future releases of the JDK. Please add Mockito as an agent to your build what is described in Mockito's documentation: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html#0.3
+WARNING: A Java agent has been loaded dynamically (C:\Users\abdel\.m2\repository\net\bytebuddy\byte-buddy-agent\1.15.11\byte-buddy-agent-1.15.11.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+Java HotSpot(TM) 64-Bit Server VM warning: Sharing is only supported for boot loader classes because bootstrap classpath has been appended
+18:36:52.892 [http-nio-auto-1-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Initializing Servlet 'dispatcherServlet'
+18:36:52.894 [http-nio-auto-1-exec-1] INFO  o.s.web.servlet.DispatcherServlet - Completed initialization in 2 ms
+18:36:53.101 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.facade.IngestionFacadeImpl - 📥 Upload sync : sample.pdf (0 MB) — batch : a568deb8-4d59-4589-b35c-4c82b42a2ce5
+18:36:53.104 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.i.IngestionOrchestrator - 📄 Ingestion : sample.pdf (PDF, 0 KB, batch: a568deb8-4d59-4589-b35c-4c82b42a2ce5)
+18:36:53.104 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.i.IngestionOrchestrator - 🎯 Stratégie : PDF (priorité: 1)
+18:36:53.138 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.d.f.DeduplicationService - ✅ [Dedup] Fichier enregistré — hash=obtcnb0weLGsBpBJ..., batchId=a568deb8-4d59-4589-b35c-4c82b42a2ce5, ttl=30days
+18:36:53.209 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 5% - Téléchargement...
+18:36:53.209 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.i.s.PdfIngestionStrategy - 📕 [PDF] Traitement PDF : sample.pdf (0 MB)
+18:36:53.211 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 8% - Validation...
+18:36:53.211 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 10% - Téléchargement terminé
+18:36:53.211 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 15% - Analyse du document...
+18:36:53.299 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 30% - Extraction texte...
+18:36:53.755 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 40% - Découpage...
+18:36:53.759 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.d.t.TextDeduplicationService - ✅ [Dedup] Nouveau texte marqué : NexRAG integration test document RAG pipeline page...
+18:36:53.802 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.s.c.EmbeddingIndexer - ✅ [Dedup] Nouveau texte indexé : NexRAG integration test document RAG pipeline page...
+18:36:53.818 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.cache.EmbeddingCache - ✗ Cache MISS : NexRAG integration test document RAG pipeline page...
+18:36:54.345 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.cache.EmbeddingCache - ✅ [Cache] Embedding mis en cache — batch : a568deb8-4d59-4589-b35c-4c82b42a2ce5
+18:36:54.389 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.t.BatchEmbeddingRegistry - 📝 [Registry] Text ajouté : batch=a568deb8-4d59-4589-b35c-4c82b42a2ce5, id=3f49160d-deaa-47ea-9622-126daef9d317
+18:36:54.390 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 90% - Embeddings: 1/1
+18:36:54.391 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.d.text.TextLocalCache - 🗑️ [Cache] Cache local nettoyé : 1 entrée(s)
+18:36:54.407 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.i.s.c.IngestionLifecycle - 📊 [Dedup] Total indexés : 1, Cache local : 0
+18:36:54.409 [http-nio-auto-1-exec-1] DEBUG c.e.n.s.r.i.progress.ProgressService - 📊 Progress: 100% - ✅ Terminé! 1 texte, 0 images
+18:36:54.410 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.i.s.PdfIngestionStrategy - ✅ [PDF] PDF traité : sample.pdf — text=1 images=0
+18:36:54.411 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.i.IngestionOrchestrator - ✅ Succès : sample.pdf — strategy=PDF text=1 images=0 1306ms
+18:36:54.413 [http-nio-auto-1-exec-1] INFO  c.e.n.s.r.facade.IngestionFacadeImpl - ✅ Ingestion OK : text=1 images=0 durée=1312ms
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 35.56 s -- in com.exemple.nexrag.service.rag.integration.IngestionPipelineIntegrationSpec
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.12:report (report) @ nex-rag ---
+[INFO] Loading execution data file D:\Formation-DATA-2024\IA-Genrative\TP\NexRAG\nex-rag\target\jacoco.exec
+[INFO] Analyzed bundle 'NexRAG' with 198 classes
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  01:20 min
+[INFO] Finished at: 2026-04-08T18:36:59+02:00
+[INFO] ------------------------------------------------------------------------

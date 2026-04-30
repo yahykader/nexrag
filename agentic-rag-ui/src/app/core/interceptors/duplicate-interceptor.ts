@@ -19,7 +19,7 @@ export const duplicateInterceptor: HttpInterceptorFn = (req, next) => {
           duplicate: true,
           filename: error.error?.filename || 'Unknown',
           batchId: error.error?.batchId || null,
-          existingBatchId: error.error?.existingBatchId || error.error?.batchId,
+          existingBatchId: error.error?.existingBatchId || error.error?.batchId || null,
           message: error.error?.message || 'Ce fichier existe déjà',
           ...error.error
         };

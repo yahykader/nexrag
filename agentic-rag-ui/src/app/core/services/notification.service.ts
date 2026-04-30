@@ -3,6 +3,8 @@
 import { Injectable } from '@angular/core';
 import { Subject } from 'rxjs';
 
+let _toastCounter = 0;
+
 export interface Toast {
   id: string;
   type: 'success' | 'error' | 'warning' | 'info';
@@ -36,7 +38,7 @@ export class NotificationService {
   
   private show(type: Toast['type'], title: string, message: string, duration: number): void {
     const toast: Toast = {
-      id: Date.now().toString(),
+      id: `${Date.now()}-${++_toastCounter}`,
       type,
       title,
       message,

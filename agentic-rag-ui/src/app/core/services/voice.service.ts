@@ -39,6 +39,7 @@ export class VoiceService {
    * ✅ Démarre l'enregistrement audio
    */
   async startRecording(): Promise<void> {
+    if (this.isRecording()) return;
     try {
       console.log('🎤 [VoiceService] Demande accès microphone');
       

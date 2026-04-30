@@ -171,6 +171,8 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - Redis (mocked via `ProxyManager<String>` Mockito mock — no real Redis in unit tests) (008-interceptor-validation)
 - TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, (011-phase2-interceptors)
 - N/A — no persistent storage; `localStorage` used only in `rateLimitInterceptor` (011-phase2-interceptors)
+- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@angular/common/http`, (012-phase3-core-services)
+- N/A — no persistent storage in tested services (012-phase3-core-services)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

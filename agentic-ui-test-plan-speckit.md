@@ -118,26 +118,6 @@ describe('RateLimitInterceptor', () => {
 
 ### Specs à créer
 
-#### `http-client.service.spec.ts`
-```ts
-import { createHttpFactory, SpectatorHttp, HttpMethod } from '@ngneat/spectator';
-
-describe('HttpClientService', () => {
-  let spectator: SpectatorHttp<HttpClientService>;
-  const createHttp = createHttpFactory(HttpClientService);
-  beforeEach(() => spectator = createHttp());
-
-  it('doit effectuer un GET et retourner les données', () => {
-    spectator.service.get('/api/test').subscribe(data => expect(data).toBeTruthy());
-    spectator.expectOne('/api/test', HttpMethod.GET).flush({ ok: true });
-  });
-
-  it('doit effectuer un POST avec le body correct', () => { ... });
-  it('doit gérer une erreur 500 avec catchError', () => { ... });
-  it('doit ajouter le Content-Type application/json', () => { ... });
-});
-```
-
 #### `crud-api.service.spec.ts`
 ```ts
 describe('CrudApiService', () => {
@@ -166,16 +146,6 @@ describe('StreamingApiService', () => {
   it('doit émettre les chunks reçus via un Observable', () => { ... });
   it('doit compléter le stream quand isDone=true est reçu', () => { ... });
   it('doit gérer les erreurs de connexion', () => { ... });
-});
-```
-
-#### `websocket-api.service.spec.ts`
-```ts
-describe('WebsocketApiService', () => {
-  it('connect() doit créer une connexion WebSocket', () => { ... });
-  it('doit émettre les messages reçus via un Subject', () => { ... });
-  it('disconnect() doit fermer proprement la connexion', () => { ... });
-  it('doit tenter une reconnexion automatique en cas de fermeture inattendue', () => { ... });
 });
 ```
 

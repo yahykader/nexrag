@@ -169,6 +169,8 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (MockMvc, `@WebMvcTest`), Jakarta Bean Validation (`@NotBlank`) (007-phase7-controllers)
 - Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (`MockHttpServletRequest`/`MockHttpServletResponse`), Bucket4j (`io.github.bucket4j:bucket4j_jdk17-lettuce`) (008-interceptor-validation)
 - Redis (mocked via `ProxyManager<String>` Mockito mock — no real Redis in unit tests) (008-interceptor-validation)
+- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, (011-phase2-interceptors)
+- N/A — no persistent storage; `localStorage` used only in `rateLimitInterceptor` (011-phase2-interceptors)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

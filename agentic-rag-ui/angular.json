@@ -96,7 +96,17 @@
           "defaultConfiguration": "development"
         },
         "test": {
-          "builder": "@angular/build:unit-test"
+          "builder": "@angular/build:unit-test",
+          "options": {
+            "tsConfig": "tsconfig.spec.json",
+            "coverageReporters": ["text", "lcov", "html"],
+            "coverageThresholds": {
+              "statements": 80,
+              "branches": 75,
+              "functions": 85,
+              "lines": 80
+            }
+          }
         }
       }
     }

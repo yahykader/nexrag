@@ -117,8 +117,8 @@
 **Purpose**: Coverage validation, commit, and cross-cutting checks.
 
 - [x] T022 Run full Phase 8 test suite with coverage and verify SC-003 targets (statements ≥ 80 %, branches ≥ 75 %, functions ≥ 85 %) using `npm test -- --coverage --include="**/chat/pages/**" --include="**/chat/resolvers/**"` in `agentic-rag-ui/`
-- [ ] T023 [P] Commit production changes with message `refactor(chat-page): extract window.confirm into ConfirmationService for test isolation`
-- [ ] T024 [P] Commit test files with message `test(phase-8): add chat-page.component.spec + chat.resolver.spec — page lifecycle & resolver guard`
+- [x] T023 [P] Commit production changes with message `refactor(chat-page): extract window.confirm into ConfirmationService for test isolation`
+- [x] T024 [P] Commit test files with message `test(phase-8): add chat-page.component.spec + chat.resolver.spec — page lifecycle & resolver guard`
 
 ---
 

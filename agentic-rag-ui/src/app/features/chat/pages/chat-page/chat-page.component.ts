@@ -8,6 +8,7 @@ import * as ChatSelectors from '../../store/chat.selectors';
 import { Conversation } from '../../store/chat.state';
 
 import { ChatInterfaceComponent } from '../../components/chat-interface/chat-interface.component';
+import { ConfirmationService } from '../../../../core/services/confirmation.service';
 
 @Component({
   selector: 'app-chat-page',
@@ -27,7 +28,7 @@ export class ChatPageComponent implements OnInit {
   
   sidebarCollapsed = false;
   
-  constructor(private store: Store) {
+  constructor(private store: Store, private confirmationService: ConfirmationService) {
     this.conversations$ = this.store.select(ChatSelectors.selectConversations);
     this.activeConversationId$ = this.store.select(ChatSelectors.selectActiveConversationId);
   }
@@ -48,7 +49,7 @@ export class ChatPageComponent implements OnInit {
   onDeleteConversation(conversationId: string, event: Event): void {
     event.stopPropagation();
     
-    if (confirm('Supprimer cette conversation ?')) {
+    if (this.confirmationService.confirm('Supprimer cette conversation ?')) {
       this.store.dispatch(ChatActions.deleteConversation({ conversationId }));
     }
   }

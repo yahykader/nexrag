@@ -175,6 +175,7 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - N/A — no persistent storage in tested services (012-phase3-core-services)
 - TypeScript 5.9 / Angular 21 + `@ngrx/store ^21.0.1`, `@ngrx/effects ^21.0.1`, `@ngrx/entity ^21.0.1`, `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, `@ngrx/effects/testing ^21.0.1` (013-chat-store-ngrx)
 - N/A — no persistence in unit tests (013-chat-store-ngrx)
+- TypeScript 5.9 / Angular 21 (standalone components throughout) + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest, `ngx-markdown` (MarkdownModule), `@angular/forms` (FormsModule) (014-chat-components-tests)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

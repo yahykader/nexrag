@@ -9,8 +9,8 @@ import {
 } from 'rxjs/operators';
 
 import * as CrudActions from './crud.actions';
-import { CrudApiService } from '../../../core/services/crud-api.service';
-import { NotificationService } from '../../../core/services/notification.service';
+import { CrudApiService } from '../../../../core/services/crud-api.service';
+import { NotificationService } from '../../../../core/services/notification.service';
 
 @Injectable()
 export class CrudEffects {

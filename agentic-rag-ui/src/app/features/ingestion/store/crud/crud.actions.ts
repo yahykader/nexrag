@@ -3,7 +3,7 @@ import {
   DeleteResponse, 
   DuplicateCheckResponse, 
   BatchInfoResponse 
-} from '../../../core/services/crud-api.service';
+} from '../../../../core/services/crud-api.service';
 
 // ========================================================================
 // DELETE FILE

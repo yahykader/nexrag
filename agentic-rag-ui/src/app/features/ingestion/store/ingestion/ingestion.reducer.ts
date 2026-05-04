@@ -2,8 +2,8 @@
 import { createReducer, on } from '@ngrx/store';
 import { initialState, UploadFile } from './ingestion.state';
 import * as IngestionActions from './ingestion.actions';
-import * as ProgressActions from './progress.actions';
-import * as CrudActions from './crud.actions';
+import * as ProgressActions from '../progress/progress.actions';
+import * as CrudActions from '../crud/crud.actions';
 
 
 export const ingestionReducer = createReducer(

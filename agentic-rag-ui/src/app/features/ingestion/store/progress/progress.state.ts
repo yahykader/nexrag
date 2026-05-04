@@ -1,5 +1,5 @@
 // features/ingestion/store/progress.state.ts
-import { UploadProgress } from '../../../core/services/websocket-progress.service';
+import { UploadProgress } from '../../../../core/services/websocket-progress.service';
 
 export interface ProgressState {
   connected: boolean;

@@ -6,11 +6,11 @@ import { map, catchError, switchMap, mergeMap, filter, withLatestFrom } from 'rx
 import { HttpClient } from '@angular/common/http';
 
 import * as IngestionActions from './ingestion.actions';
-import * as ProgressActions from './progress.actions';
+import * as ProgressActions from '../progress/progress.actions';
 import * as IngestionSelectors from './ingestion.selectors';
-import * as RateLimitActions from '../store/rate-limit/rate-limit.actions';
-import { selectIsRateLimited }  from '../store/rate-limit/rate-limit.selectors';
-import { IngestionApiService } from '../../../core/services/ingestion-api.service';
+import * as RateLimitActions from '../rate-limit/rate-limit.actions';
+import { selectIsRateLimited }  from '../rate-limit/rate-limit.selectors';
+import { IngestionApiService } from '../../../../core/services/ingestion-api.service';
 import { Store } from '@ngrx/store';
 import { selectRateLimitedUploads } from './ingestion.selectors';
 

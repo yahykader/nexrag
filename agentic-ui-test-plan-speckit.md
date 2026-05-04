@@ -421,52 +421,239 @@ describe('ChatResolver', () => {
 
 ## ✅ PHASE 9 — `src/app/features/ingestion/store`
 
-> **Sous-stores** : `crud`, `ingestion`, `progress`, `rate-limit`
+> **Type** : Tests NgRx  
+> **Sous-stores** : `store/crud/`, `store/ingestion/`, `store/progress/`, `store/rate-limit/`  
+> **Fichiers par sous-store** : `*.actions.ts`, `*.reducer.ts`, `*.selectors.ts`, `*.effects.ts`, `*.state.ts`
 
-### `crud.reducer.spec.ts`
+---
+
+### 9.1 — `store/crud/`
+
+#### `crud/crud.actions.spec.ts`
+```ts
+describe('CrudActions', () => {
+  it('deleteFile doit avoir le type "[CRUD] Delete File" avec embeddingId et fileType', () => { ... });
+  it('deleteFileSuccess doit avoir le type "[CRUD] Delete File Success" avec response', () => { ... });
+  it('deleteBatch doit avoir le type "[CRUD] Delete Batch" avec batchId', () => { ... });
+  it('deleteAllFiles doit avoir le type "[CRUD] Delete All Files" avec confirmation', () => { ... });
+  it('checkDuplicate doit avoir le type "[CRUD] Check Duplicate" avec file', () => { ... });
+  it('getBatchInfo doit avoir le type "[CRUD] Get Batch Info" avec batchId', () => { ... });
+  it('getSystemStats doit avoir le type "[CRUD] Get System Stats" sans payload', () => { ... });
+  it('clearAll doit avoir le type "[CRUD] Clear All" sans payload', () => { ... });
+});
+```
+
+#### `crud/crud.reducer.spec.ts`
 ```ts
 describe('CrudReducer', () => {
-  it('LoadDocumentsSuccess doit peupler la liste', () => { ... });
-  it('DeleteDocumentSuccess doit retirer l\'item par id', () => { ... });
-  it('DeleteAllSuccess doit vider la liste', () => { ... });
-  it('SetLoading doit passer loading à true', () => { ... });
+  it('doit retourner l\'état initial', () => {
+    const state = crudReducer(undefined, { type: '@@INIT' });
+    expect(state).toEqual(initialCrudState);
+  });
+  it('deleteFile doit passer loading à true et incrémenter activeDeleteOperations', () => { ... });
+  it('deleteFileSuccess doit passer loading à false et mettre à jour le statut de l\'opération', () => { ... });
+  it('deleteFileError doit stocker l\'erreur et décrémenter activeDeleteOperations', () => { ... });
+  it('deleteBatch doit créer une opération de type "batch" en statut "pending"', () => { ... });
+  it('deleteBatchSuccess doit retirer le batchId du cache batchInfos', () => { ... });
+  it('deleteAllFiles doit créer une opération de type "all"', () => { ... });
+  it('deleteAllFilesSuccess doit vider batchInfos et duplicateChecks', () => { ... });
+  it('checkDuplicateSuccess doit stocker le résultat par filename', () => { ... });
+  it('getBatchInfoSuccess doit stocker les infos du batch par batchId', () => { ... });
+  it('getSystemStatsSuccess doit mettre à jour systemStats avec lastUpdate', () => { ... });
+  it('clearDeleteOperations doit vider deleteOperations[]', () => { ... });
+  it('clearAll doit retourner initialCrudState', () => { ... });
+  it('activeDeleteOperations ne doit jamais descendre en dessous de 0 (Math.max guard)', () => { ... });
 });
 ```
 
-### `ingestion.reducer.spec.ts`
+#### `crud/crud.selectors.spec.ts`
+```ts
+describe('CrudSelectors', () => {
+  it('selectDeleteOperations doit retourner la liste des opérations', () => { ... });
+  it('selectActiveDeleteOperations doit retourner le nombre d\'opérations actives', () => { ... });
+  it('selectIsLoading doit retourner true pendant une suppression', () => { ... });
+  it('selectDuplicateChecks doit retourner le map par filename', () => { ... });
+  it('selectBatchInfos doit retourner le map par batchId', () => { ... });
+  it('selectSystemStats doit retourner les stats système', () => { ... });
+  it('selectCrudError doit retourner null par défaut', () => { ... });
+});
+```
+
+#### `crud/crud.effects.spec.ts`
+```ts
+describe('CrudEffects', () => {
+  it('deleteFile$ doit appeler CrudApiService et dispatcher deleteFileSuccess', () => { ... });
+  it('deleteFile$ doit dispatcher deleteFileError si l\'API échoue', () => { ... });
+  it('deleteBatch$ doit appeler CrudApiService.deleteBatch() et dispatcher deleteBatchSuccess', () => { ... });
+  it('deleteAllFiles$ doit appeler CrudApiService.deleteAll() avec la confirmation', () => { ... });
+  it('checkDuplicate$ doit appeler CrudApiService.checkDuplicate() et dispatcher checkDuplicateSuccess', () => { ... });
+  it('getBatchInfo$ doit appeler CrudApiService.getBatchInfo() par batchId', () => { ... });
+  it('getSystemStats$ doit appeler CrudApiService.getSystemStats()', () => { ... });
+});
+```
+
+---
+
+### 9.2 — `store/ingestion/`
+
+#### `ingestion/ingestion.actions.spec.ts`
+```ts
+describe('IngestionActions', () => {
+  it('addFilesToUpload doit avoir le type "[Ingestion] Add Files To Upload" avec files[]', () => { ... });
+  it('uploadFileAsync doit avoir le type "[Ingestion] Upload File Async" avec fileId et file', () => { ... });
+  it('uploadFileAsyncAccepted doit avoir le type "[Ingestion] Upload File Async Accepted" avec batchId', () => { ... });
+  it('uploadFileRateLimited doit avoir le type "[Ingestion] Upload File Rate Limited" avec retryAfterSeconds', () => { ... });
+  it('uploadFileDuplicate doit avoir le type "[Ingestion] Upload File Duplicate" avec existingBatchId', () => { ... });
+  it('updateUploadStatus doit accepter tous les statuts valides', () => { ... });
+  it('removeFile doit avoir le type "[Ingestion] Remove File" avec fileId', () => { ... });
+  it('clearAllFiles doit avoir le type "[Ingestion] Clear All Files" sans payload', () => { ... });
+  it('setUploadMode doit accepter "sync" et "async"', () => { ... });
+  it('toggleUploadMode doit avoir le type "[Ingestion] Toggle Upload Mode" sans payload', () => { ... });
+});
+```
+
+#### `ingestion/ingestion.reducer.spec.ts`
 ```ts
 describe('IngestionReducer', () => {
-  it('AddUploadItems doit ajouter les fichiers en PENDING', () => { ... });
-  it('UpdateItemStatus doit changer le statut d\'un item', () => { ... });
-  it('RemoveItem doit retirer un item de la liste', () => { ... });
-  it('ResetIngestion doit vider complètement la liste', () => { ... });
+  it('doit retourner l\'état initial avec uploadMode "async"', () => { ... });
+  it('addFilesToUpload doit ajouter les fichiers avec statut "pending"', () => { ... });
+  it('updateUploadStatus doit changer le statut d\'un upload par fileId', () => { ... });
+  it('updateUploadStatus doit stocker batchId et existingBatchId optionnels', () => { ... });
+  it('uploadFileRateLimited doit passer le statut à "rate-limited" et stocker retryAfterSeconds', () => { ... });
+  it('uploadFileDuplicate doit passer le statut à "duplicate" avec existingBatchId', () => { ... });
+  it('removeFile doit retirer l\'upload de la liste', () => { ... });
+  it('clearAllFiles doit vider uploads[] et réinitialiser stats à zéro', () => { ... });
+  it('setUploadMode doit changer uploadMode entre "sync" et "async"', () => { ... });
+  it('toggleUploadMode doit inverser uploadMode de "async" à "sync" et inversement', () => { ... });
+  it('clearCompletedUploads doit ne garder que les uploads non terminés', () => { ... });
 });
 ```
 
-### `progress.reducer.spec.ts`
+#### `ingestion/ingestion.selectors.spec.ts`
+```ts
+describe('IngestionSelectors', () => {
+  it('selectAllUploads doit retourner tous les uploads', () => { ... });
+  it('selectUploadById doit retrouver un upload par fileId', () => { ... });
+  it('selectUploadMode doit retourner "async" par défaut', () => { ... });
+  it('selectUploadStats doit retourner les compteurs success/errors/duplicates/rateLimited', () => { ... });
+  it('selectActiveUploads doit retourner le nombre d\'uploads en cours', () => { ... });
+  it('selectPendingUploads doit filtrer les uploads en statut "pending"', () => { ... });
+});
+```
+
+#### `ingestion/ingestion.effects.spec.ts`
+```ts
+describe('IngestionEffects', () => {
+  it('uploadFileAsync$ doit appeler IngestionApiService.uploadAsync() et dispatcher uploadFileAsyncAccepted', () => { ... });
+  it('uploadFileAsync$ doit dispatcher uploadFileAsyncError si l\'API échoue', () => { ... });
+  it('uploadFileAsync$ doit dispatcher uploadFileRateLimited sur une réponse 429', () => { ... });
+  it('uploadFile$ (sync) doit appeler IngestionApiService.upload() et dispatcher uploadFileSuccess', () => { ... });
+  it('addFilesToUpload$ doit déclencher uploadFileAsync ou uploadFile selon uploadMode', () => { ... });
+});
+```
+
+---
+
+### 9.3 — `store/progress/`
+
+#### `progress/progress.actions.spec.ts`
+```ts
+describe('ProgressActions', () => {
+  it('connectWebSocket doit avoir le type "[Progress] Connect WebSocket" sans payload', () => { ... });
+  it('connectWebSocketError doit avoir le type "[Progress] Connect WebSocket Error" avec error', () => { ... });
+  it('subscribeToProgress doit avoir le type "[Progress] Subscribe To Progress" avec batchId', () => { ... });
+  it('progressUpdate doit avoir le type "[Progress] Progress Update" avec un objet UploadProgress', () => { ... });
+  it('progressCompleted doit avoir le type "[Progress] Progress Completed" avec batchId', () => { ... });
+  it('progressError doit avoir le type "[Progress] Progress Error" avec batchId et error', () => { ... });
+  it('clearProgress doit avoir le type "[Progress] Clear Progress" avec batchId', () => { ... });
+  it('clearAllProgress doit avoir le type "[Progress] Clear All Progress" sans payload', () => { ... });
+});
+```
+
+#### `progress/progress.reducer.spec.ts`
 ```ts
 describe('ProgressReducer', () => {
-  it('UpdateProgress doit mettre à jour le % d\'avancement par batchId', () => { ... });
-  it('CompleteProgress doit passer isComplete à true', () => { ... });
-  it('ResetProgress doit réinitialiser l\'état', () => { ... });
+  it('doit retourner l\'état initial', () => { ... });
+  it('connectWebSocketSuccess doit passer isConnected à true', () => { ... });
+  it('connectWebSocketError doit stocker l\'erreur de connexion', () => { ... });
+  it('subscribeToProgress doit enregistrer le batchId dans les subscriptions actives', () => { ... });
+  it('progressUpdate doit mettre à jour le % et le message par batchId', () => { ... });
+  it('progressCompleted doit passer isComplete à true pour le batch concerné', () => { ... });
+  it('progressError doit stocker l\'erreur pour le batchId', () => { ... });
+  it('clearProgress doit supprimer les données du batchId ciblé', () => { ... });
+  it('clearAllProgress doit réinitialiser l\'état complet', () => { ... });
 });
 ```
 
-### `rate-limit.reducer.spec.ts`
+#### `progress/progress.selectors.spec.ts`
+```ts
+describe('ProgressSelectors', () => {
+  it('selectProgressByBatchId doit retourner les données d\'un batch spécifique', () => { ... });
+  it('selectIsWebSocketConnected doit retourner false par défaut', () => { ... });
+  it('selectAllProgressEntries doit retourner tous les suivis actifs', () => { ... });
+  it('selectHasActiveProgress doit retourner true si au moins un batch est en cours', () => { ... });
+});
+```
+
+#### `progress/progress.effects.spec.ts`
+```ts
+describe('ProgressEffects', () => {
+  it('connectWebSocket$ doit appeler WebsocketProgressService.connect() et dispatcher connectWebSocketSuccess', () => { ... });
+  it('subscribeToProgress$ doit appeler WebsocketProgressService.subscribe(batchId)', () => { ... });
+  it('doit dispatcher progressUpdate pour chaque message WebSocket reçu', () => { ... });
+  it('doit dispatcher progressCompleted quand le statut "DONE" est reçu', () => { ... });
+  it('doit dispatcher progressError si le WebSocket émet une erreur', () => { ... });
+});
+```
+
+---
+
+### 9.4 — `store/rate-limit/`
+
+#### `rate-limit/rate-limit.actions.spec.ts`
+```ts
+describe('RateLimitActions', () => {
+  it('rateLimitExceeded doit avoir le type "[Rate Limit] Exceeded" avec message et retryAfterSeconds', () => { ... });
+  it('rateLimitReset doit avoir le type "[Rate Limit] Reset" sans payload', () => { ... });
+  it('updateRemainingTokens doit avoir le type "[Rate Limit] Update Remaining Tokens" avec endpoint et remaining', () => { ... });
+  it('updateRemainingTokens doit accepter les endpoints : upload, batch, delete, search, default', () => { ... });
+  it('startCountdown doit avoir le type "[Rate Limit] Start Countdown" avec seconds', () => { ... });
+  it('decrementCountdown doit avoir le type "[Rate Limit] Decrement Countdown" sans payload', () => { ... });
+});
+```
+
+#### `rate-limit/rate-limit.reducer.spec.ts`
 ```ts
 describe('RateLimitReducer', () => {
-  it('RateLimitExceeded doit stocker le retryAfter', () => { ... });
-  it('RateLimitReset doit remettre isLimited à false', () => { ... });
-  it('doit calculer correctement le temps restant', () => { ... });
+  it('doit retourner l\'état initial (isRateLimited: false, limites upload=10, batch=5, delete=20, search=50)', () => { ... });
+  it('rateLimitExceeded doit passer isRateLimited à true et stocker retryAfterSeconds', () => { ... });
+  it('rateLimitExceeded doit stocker le message d\'erreur', () => { ... });
+  it('rateLimitReset doit réinitialiser isRateLimited à false et retryAfterSeconds à 0', () => { ... });
+  it('updateRemainingTokens doit mettre à jour le champ correspondant à l\'endpoint', () => { ... });
+  it('startCountdown doit stocker le nombre de secondes dans retryAfterSeconds', () => { ... });
+  it('decrementCountdown doit décrémenter retryAfterSeconds de 1', () => { ... });
+  it('decrementCountdown ne doit pas descendre en dessous de 0', () => { ... });
 });
 ```
 
-### `crud.effects.spec.ts` / `ingestion.effects.spec.ts` / `progress.effects.spec.ts`
+#### `rate-limit/rate-limit.selectors.spec.ts`
 ```ts
-// Pattern commun pour les effects NgRx
-describe('XxxEffects', () => {
-  it('doit appeler l\'API et dispatcher le succès', () => { ... });
-  it('doit dispatcher l\'action d\'erreur si l\'API échoue', () => { ... });
+describe('RateLimitSelectors', () => {
+  it('selectIsRateLimited doit retourner false par défaut', () => { ... });
+  it('selectRetryAfterSeconds doit retourner 0 par défaut', () => { ... });
+  it('selectRemainingTokens doit retourner les jetons par endpoint (null par défaut)', () => { ... });
+  it('selectRemainingByEndpoint("upload") doit retourner null par défaut', () => { ... });
+  it('selectLimits doit retourner upload=10, batch=5, delete=20, search=50, default=30', () => { ... });
+  it('selectRateLimitMessage doit retourner une chaîne vide par défaut', () => { ... });
+});
+```
+
+#### `rate-limit/rate-limit.effects.spec.ts`
+```ts
+describe('RateLimitEffects', () => {
+  it('startCountdown$ doit déclencher decrementCountdown toutes les secondes', fakeAsync(() => { ... }));
+  it('doit arrêter le countdown quand retryAfterSeconds atteint 0', fakeAsync(() => { ... }));
+  it('doit dispatcher rateLimitReset quand le compte à rebours expire', () => { ... });
 });
 ```
 
@@ -713,13 +900,13 @@ export const mockUploadItem = (overrides = {}) => ({
 | 6 – Chat Store | 5 | 18 | 0 |
 | 7 – Chat Components | 4 | 22 | 4 |
 | 8 – Chat Pages/Resolvers | 2 | 8 | 2 |
-| 9 – Ingestion Store | 8 | 24 | 0 |
+| 9 – Ingestion Store | 16 | 52 | 0 |
 | 10 – Ingestion Components | 8 | 32 | 0 |
 | 11 – Ingestion Pages | 1 | 7 | 3 |
 | 12 – Management | 4+ | 14 | 2 |
 | 13 – Workspace | 1 | 6 | 3 |
 | 14 – App Root | 3 | 12 | 2 |
-| **TOTAL** | **~52** | **~204** | **~17** |
+| **TOTAL** | **~60** | **~232** | **~17** |
 
 ---
 

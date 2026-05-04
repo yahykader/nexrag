@@ -17,20 +17,20 @@ import { routes } from './app.routes';
 import { duplicateInterceptor } from './core/interceptors/duplicate-interceptor';
 
 // Reducers
-import { ingestionReducer } from './features/ingestion/store/ingestion.reducer';
-import { progressReducer } from './features/ingestion/store/progress.reducer';
+import { ingestionReducer } from './features/ingestion/store/ingestion/ingestion.reducer';
+import { progressReducer } from './features/ingestion/store/progress/progress.reducer';
 
 // Effects
-import { IngestionEffects } from './features/ingestion/store/ingestion.effects';
-import { ProgressEffects } from './features/ingestion/store/progress.effects';
+import { IngestionEffects } from './features/ingestion/store/ingestion/ingestion.effects';
+import { ProgressEffects } from './features/ingestion/store/progress/progress.effects';
 import { MaterialModule } from './material/material.module';
 
 import { CrudApiService } from './core/services/crud-api.service';
 import { StreamingApiService } from './core/services/streaming-api.service';
 import { WebSocketProgressService } from './core/services/websocket-progress.service';
 import { IngestionApiService } from './core/services/ingestion-api.service';
-import { crudReducer } from './features/ingestion/store/crud.reducer';
-import { CrudEffects } from './features/ingestion/store/crud.effects';
+import { crudReducer } from './features/ingestion/store/crud/crud.reducer';
+import { CrudEffects } from './features/ingestion/store/crud/crud.effects';
 import { rateLimitInterceptor } from './core/interceptors/rate-limit.interceptor';
 import { rateLimitReducer } from './features/ingestion/store/rate-limit/rate-limit.reducer';
 import { RateLimitEffects } from './features/ingestion/store/rate-limit/rate-limit.effects';

@@ -5,12 +5,12 @@ import { Store } from '@ngrx/store';
 import { Observable } from 'rxjs';
 import { map, filter, take } from 'rxjs/operators';
 
-import { UploadFile } from '../../store/ingestion.state';
+import { UploadFile } from '../../store/ingestion/ingestion.state';
 import { UploadProgress } from '../../../../core/services/websocket-progress.service';
-import * as ProgressSelectors from '../../store/progress.selectors';
-import * as IngestionActions from '../../store/ingestion.actions';
-import * as CrudActions from '../../../ingestion/store/crud.actions';
-import * as CrudSelectors from '../../../ingestion/store/crud.selectors';
+import * as ProgressSelectors from '../../store/progress/progress.selectors';
+import * as IngestionActions from '../../store/ingestion/ingestion.actions';
+import * as CrudActions from '../../store/crud/crud.actions';
+import * as CrudSelectors from '../../store/crud/crud.selectors';
 import { DeleteBatchModalComponent } from '../delete-batch-modal/delete-batch-modal.component';
 import { NotificationService } from '../../../../core/services/notification.service';
 

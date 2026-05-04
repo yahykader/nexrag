@@ -1,5 +1,5 @@
 // features/ingestion/store/ingestion.state.ts
-import { AsyncResponse, IngestionResponse } from '../../../core/services/ingestion-api.service';
+import { AsyncResponse, IngestionResponse } from '../../../../core/services/ingestion-api.service';
 
 // ✅ MODIFIER: Ajouter 'rate-limited' au type status
 export interface UploadFile {

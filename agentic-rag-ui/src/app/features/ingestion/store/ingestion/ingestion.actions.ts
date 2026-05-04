@@ -1,6 +1,6 @@
 // features/ingestion/store/ingestion.actions.ts
 import { createAction, props } from '@ngrx/store';
-import { AsyncResponse, IngestionResponse } from '../../../core/services/ingestion-api.service';
+import { AsyncResponse, IngestionResponse } from '../../../../core/services/ingestion-api.service';
 
 import { UploadFile } from './ingestion.state';
 // ========================================================================

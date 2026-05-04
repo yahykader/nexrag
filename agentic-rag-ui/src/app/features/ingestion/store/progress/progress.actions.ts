@@ -1,6 +1,6 @@
 // features/ingestion/store/progress.actions.ts
 import { createAction, props } from '@ngrx/store';
-import { UploadProgress } from '../../../core/services/websocket-progress.service';
+import { UploadProgress } from '../../../../core/services/websocket-progress.service';
 
 // WebSocket connection
 export const connectWebSocket = createAction(

@@ -5,12 +5,12 @@ import { Store } from '@ngrx/store';
 import { Observable } from 'rxjs';
 import { take } from 'rxjs/operators';
 
-import * as IngestionActions from '../../store/ingestion.actions';
-import * as IngestionSelectors from '../../store/ingestion.selectors';
-import * as ProgressActions from '../../store/progress.actions';
-import * as ProgressSelectors from '../../store/progress.selectors';
+import * as IngestionActions from '../../store/ingestion/ingestion.actions';
+import * as IngestionSelectors from '../../store/ingestion/ingestion.selectors';
+import * as ProgressActions from '../../store/progress/progress.actions';
+import * as ProgressSelectors from '../../store/progress/progress.selectors';
 
-import { UploadFile } from '../../store/ingestion.state';
+import { UploadFile } from '../../store/ingestion/ingestion.state';
 import { UploadProgress } from '../../../../core/services/websocket-progress.service';
 
 import { UploadZoneComponent } from '../../components/upload-zone/upload-zone.component';

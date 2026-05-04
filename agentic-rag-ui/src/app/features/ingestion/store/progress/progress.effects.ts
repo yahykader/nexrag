@@ -12,8 +12,8 @@ import {
   withLatestFrom
 } from 'rxjs/operators';
 import * as ProgressActions from './progress.actions';
-import * as IngestionActions from './ingestion.actions';
-import { WebSocketProgressService } from '../../../core/services/websocket-progress.service';
+import * as IngestionActions from '../ingestion/ingestion.actions';
+import { WebSocketProgressService } from '../../../../core/services/websocket-progress.service';
 import { Store } from '@ngrx/store';
 
 @Injectable()

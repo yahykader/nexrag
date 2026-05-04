@@ -6,8 +6,8 @@ import { from, Observable } from 'rxjs';
 import { filter, take } from 'rxjs/operators';
 
 
-import * as CrudActions from '../../store/crud.actions';
-import * as CrudSelectors from '../../store/crud.selectors';
+import * as CrudActions from '../../store/crud/crud.actions';
+import * as CrudSelectors from '../../store/crud/crud.selectors';
 import { DeleteAllModalComponent } from '../delete-all-modal/delete-all-modal.component';
 import { NotificationService } from '../../../../core/services/notification.service';
 

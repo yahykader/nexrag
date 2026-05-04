@@ -4,7 +4,7 @@ import { CommonModule } from '@angular/common';
 import { Store } from '@ngrx/store';
 import { Observable } from 'rxjs';
 
-import * as ProgressSelectors from '../../store/progress.selectors';
+import * as ProgressSelectors from '../../store/progress/progress.selectors';
 import { UploadProgress } from '../../../../core/services/websocket-progress.service';
 
 @Component({

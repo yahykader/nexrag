@@ -43,7 +43,11 @@ export const progressReducer = createReducer(
   
   // ✅ MISE À JOUR: Ajouter propriétés auto-clear
   on(ProgressActions.progressUpdate, (state, { progress }) => {
-    
+    // FR-015: no-op pour batchId non souscrit
+    if (!state.subscribedBatches.includes(progress.batchId)) {
+      return state;
+    }
+
     // Si COMPLETED ou ERROR, marquer pour auto-clear
     if (progress.stage === 'COMPLETED' || progress.stage === 'ERROR') {
       return {

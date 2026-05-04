@@ -4,6 +4,7 @@ import { Store } from '@ngrx/store';
 import { interval, of } from 'rxjs';
 import { map, switchMap, takeWhile, tap } from 'rxjs/operators';
 import * as RateLimitActions from './rate-limit.actions';
+import * as IngestionActions from '../ingestion/ingestion.actions';
 
 @Injectable()
 export class RateLimitEffects {
@@ -23,6 +24,16 @@ export class RateLimitEffects {
     )
   );
   
+  // FR-016: propagation cross-store uploadFileRateLimited → rateLimitExceeded
+  handleUploadRateLimited$ = createEffect(() =>
+    this.actions$.pipe(
+      ofType(IngestionActions.uploadFileRateLimited),
+      map(({ retryAfterSeconds, message }) =>
+        RateLimitActions.rateLimitExceeded({ retryAfterSeconds, message })
+      )
+    )
+  );
+
   autoReset$ = createEffect(() =>
     this.actions$.pipe(
       ofType(RateLimitActions.decrementCountdown),

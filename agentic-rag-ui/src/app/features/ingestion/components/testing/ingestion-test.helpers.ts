@@ -67,3 +67,17 @@ export const mockProgressState = () => ({
     subscribedBatches: [],
   },
 });
+
+export const mockFullIngestionState = (overrides: {
+  uploads?: UploadFile[];
+  isRateLimited?: boolean;
+  retryAfterSeconds?: number;
+} = {}) => ({
+  ...mockIngestionState(overrides.uploads ?? []),
+  ...mockProgressState(),
+  ...mockCrudState(),
+  ...mockRateLimitState({
+    isRateLimited: overrides.isRateLimited ?? false,
+    retryAfterSeconds: overrides.retryAfterSeconds ?? 0,
+  }),
+});

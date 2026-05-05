@@ -2,6 +2,7 @@ import { conversationsAdapter, ChatState, Message, Conversation } from './featur
 import { UploadFile } from './features/ingestion/store/ingestion/ingestion.state';
 import { DeleteOperation } from './features/ingestion/store/crud/crud.state';
 import { UploadProgress } from './core/services/websocket-progress.service';
+import { MemoizedSelector } from '@ngrx/store';
 
 export function buildChatState(overrides: Partial<ChatState> = {}): ChatState {
   return {
@@ -69,4 +70,8 @@ export function mockUploadProgress(overrides: Partial<UploadProgress> = {}): Upl
     message: 'Processing...',
     ...overrides
   };
+}
+
+export function releaseSelectors(selectors: MemoizedSelector<any, any>[]): void {
+  selectors.forEach(s => s.release());
 }

@@ -2,12 +2,12 @@
 import { Component, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Store } from '@ngrx/store';
-import { from, Observable } from 'rxjs';
-import { filter, take } from 'rxjs/operators';
-
+import { combineLatest, from, Observable } from 'rxjs';
+import { filter, map, take } from 'rxjs/operators';
 
 import * as CrudActions from '../../store/crud/crud.actions';
 import * as CrudSelectors from '../../store/crud/crud.selectors';
+import { selectUploads } from '../../store/ingestion/ingestion.selectors';
 import { DeleteAllModalComponent } from '../delete-all-modal/delete-all-modal.component';
 import { NotificationService } from '../../../../core/services/notification.service';
 
@@ -25,9 +25,14 @@ export class DeleteAllButtonComponent {
 ;
   
   isDeleting$: Observable<boolean>;
-  
+  isDisabled$: Observable<boolean>;
+
   constructor(private store: Store, private notificationService: NotificationService) {
     this.isDeleting$ = this.store.select(CrudSelectors.selectCrudLoading);
+    this.isDisabled$ = combineLatest([
+      this.store.select(CrudSelectors.selectCrudLoading),
+      this.store.select(selectUploads),
+    ]).pipe(map(([loading, uploads]) => loading || uploads.length === 0));
   }
  
   openDeleteModal(): void {

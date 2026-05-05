@@ -13,7 +13,7 @@
       <button 
         class="btn btn-danger btn-lg w-100"
         (click)="openDeleteModal()"
-        [disabled]="isDeleting$ | async">
+        [disabled]="isDisabled$ | async">
         <span *ngIf="!(isDeleting$ | async)">
           <i class="bi bi-trash3 me-2"></i>
           Supprimer TOUT le Système

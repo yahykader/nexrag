@@ -177,6 +177,8 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - N/A — no persistence in unit tests (013-chat-store-ngrx)
 - TypeScript 5.9 / Angular 21 (standalone components throughout) + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest, `ngx-markdown` (MarkdownModule), `@angular/forms` (FormsModule) (014-chat-components-tests)
 - TypeScript 5.9 / Angular 21 (standalone components throughout) + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8`, `@ngrx/store ^21.0.1`, `@ngrx/entity ^21.0.1` (015-chat-pages-resolvers)
+- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, `@ngrx/effects/testing ^21.0.1`, Vitest `^4.0.8` (017-ingestion-components-tests)
+- N/A — all specs use `provideMockStore`; no real persistence (017-ingestion-components-tests)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

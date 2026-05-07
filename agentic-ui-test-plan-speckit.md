@@ -812,11 +812,9 @@ describe('ManagementPageComponent', () => {
 ```ts
 describe('WorkspaceComponent', () => {
   it('doit créer le composant', () => { ... });
-  it('doit afficher le layout principal (sidebar + main)', () => { ... });
+  it('doit afficher le layout principal side a gauche)', () => { ... });
+  it('doit afficher le layout principal main a droite)', () => { ... });
   it('doit afficher le ToastContainerComponent', () => { ... });
-  it('doit router vers /chat par défaut', () => { ... });
-  it('doit router vers /upload quand la navigation upload est activée', () => { ... });
-  it('doit router vers /management quand la navigation management est activée', () => { ... });
 });
 ```
 

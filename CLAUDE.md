@@ -180,6 +180,11 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, `@ngrx/effects/testing ^21.0.1`, Vitest `^4.0.8` (017-ingestion-components-tests)
 - N/A — all specs use `provideMockStore`; no real persistence (017-ingestion-components-tests)
 - TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8` (018-ingestion-pages-tests)
+- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, Angular RouterTestingModule, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8` (019-workspace-page-tests)
+- N/A — no persistence; all state lives in child components via shared NgRx store (019-workspace-page-tests)
+- TypeScript 5.9 / Angular 21 + `@ngneat/spectator/vitest ^22.1.0`, `RouterTestingModule` (Angular 21 BOM), Vitest `^4.0.8` (019-workspace-page-tests)
+- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8`, `RouterTestingModule` (Angular 21 BOM) (019-app-root-tests)
+- N/A — `provideMockStore` for unit tests; real `appConfig` providers for integration tests (019-app-root-tests)
 
 ## Recent Changes
 - 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin

@@ -103,7 +103,7 @@
 
 - [x] T024 Run the full Phase 14 suite together: `npm test -- --run --reporter=verbose --include="src/app/app.*.spec.ts"` and confirm all 14 tests pass (12 unit + 2 integration, zero failures, zero skipped)
 - [x] T025 [P] Run coverage report for the 3 source files: `npm test -- --run --coverage --include="src/app/app.*.spec.ts"` — verify all 4 thresholds for `app.component.ts`, `app.routes.ts`, `app.config.ts`: statements ≥ 80%, branches ≥ 75%, functions ≥ 85%, lines ≥ 80%
-- [ ] T026 Stage and commit the 3 new spec files and the stub deletion: `git add src/app/app.component.spec.ts src/app/app.routes.spec.ts src/app/app.config.spec.ts && git rm src/app/app.spec.ts && git commit -m "test(phase-14): add app.component/routes/config specs — shell, routing, provider coverage"`
+- [x] T026 Stage and commit the 3 new spec files and the stub deletion: `git add src/app/app.component.spec.ts src/app/app.routes.spec.ts src/app/app.config.spec.ts && git rm src/app/app.spec.ts && git commit -m "test(phase-14): add app.component/routes/config specs — shell, routing, provider coverage"`
 
 **Checkpoint**: All 14 Phase 14 tests green, coverage gates satisfied, committed. 🎉
 

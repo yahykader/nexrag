@@ -6,27 +6,42 @@ import {
   selectCompletedUploads,
   selectUploadMode,
   selectRateLimitedUploads,
-  selectRateLimitedCount
 } from './ingestion.selectors';
 import { initialState } from './ingestion.state';
 import { mockUploadFile } from '../../../../test-helpers';
 
 describe('IngestionSelectors', () => {
-  const baseState = { ingestion: initialState };
 
-  it('selectUploads doit retourner le tableau d\'uploads', () => {
+  // ── Directs (dépendent de selectIngestionState) → projector reçoit feature state ──
+
+  it("selectUploads doit retourner le tableau d'uploads", () => {
     const uploads = [mockUploadFile({ id: 'f1' })];
-    const state = { ingestion: { ...initialState, uploads } };
-    expect(selectUploads(state as any)).toEqual(uploads);
+    expect(selectUploads.projector({ ...initialState, uploads })).toEqual(uploads);
   });
+
+  it('selectUploadMode doit retourner async par défaut', () => {
+    expect(selectUploadMode.projector(initialState)).toBe('async');
+  });
+
+  it('selectRateLimitedUploads doit filtrer les uploads avec status rate-limited', () => {
+    const uploads = [
+      mockUploadFile({ id: 'f1', status: 'uploading' }),
+      mockUploadFile({ id: 'f2', status: 'rate-limited' }),
+    ];
+    // ⚠️ dépend de selectIngestionState (pas selectUploads) → feature state
+    const rateLimited = selectRateLimitedUploads.projector({ ...initialState, uploads });
+    expect(rateLimited).toHaveLength(1);
+    expect(rateLimited[0].id).toBe('f2');
+  });
+
+  // ── Composés (dépendent de selectUploads) → projector reçoit UploadFile[] ──
 
   it('selectPendingUploads doit filtrer les uploads avec status pending', () => {
     const uploads = [
       mockUploadFile({ id: 'f1', status: 'pending' }),
       mockUploadFile({ id: 'f2', status: 'uploading' }),
     ];
-    const state = { ingestion: { ...initialState, uploads } };
-    const pending = selectPendingUploads(state as any);
+    const pending = selectPendingUploads.projector(uploads);
     expect(pending).toHaveLength(1);
     expect(pending[0].id).toBe('f1');
   });
@@ -36,8 +51,7 @@ describe('IngestionSelectors', () => {
       mockUploadFile({ id: 'f1', status: 'pending' }),
       mockUploadFile({ id: 'f2', status: 'uploading' }),
     ];
-    const state = { ingestion: { ...initialState, uploads } };
-    const active = selectActiveUploads(state as any);
+    const active = selectActiveUploads.projector(uploads);
     expect(active).toHaveLength(1);
     expect(active[0].id).toBe('f2');
   });
@@ -50,24 +64,8 @@ describe('IngestionSelectors', () => {
       mockUploadFile({ id: 'f4', status: 'rate-limited' }),
       mockUploadFile({ id: 'f5', status: 'pending' }),
     ];
-    const state = { ingestion: { ...initialState, uploads } };
-    const completed = selectCompletedUploads(state as any);
+    const completed = selectCompletedUploads.projector(uploads);
     expect(completed).toHaveLength(3);
     expect(completed.map(u => u.id)).toEqual(['f1', 'f2', 'f3']);
-  });
-
-  it('selectUploadMode doit retourner async par défaut', () => {
-    expect(selectUploadMode(baseState as any)).toBe('async');
-  });
-
-  it('selectRateLimitedUploads doit filtrer les uploads avec status rate-limited', () => {
-    const uploads = [
-      mockUploadFile({ id: 'f1', status: 'uploading' }),
-      mockUploadFile({ id: 'f2', status: 'rate-limited' }),
-    ];
-    const state = { ingestion: { ...initialState, uploads } };
-    const rateLimited = selectRateLimitedUploads(state as any);
-    expect(rateLimited).toHaveLength(1);
-    expect(rateLimited[0].id).toBe('f2');
   });
 });

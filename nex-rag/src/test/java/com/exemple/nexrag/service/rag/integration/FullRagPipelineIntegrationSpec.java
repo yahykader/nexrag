@@ -92,13 +92,10 @@ public class FullRagPipelineIntegrationSpec extends AbstractIntegrationSpec {
         log.info("Phase 3: Streaming response...");
         Instant streamStart = Instant.now();
 
-        var streamBody = new LinkedMultiValueMap<String, Object>();
-        streamBody.add("query", "NexRAG");
-        streamBody.add("conversationId", conversationId);
-
+        String queryString = "query=NexRAG&conversationId=" + conversationId;
         var streamResponse = restTemplate.postForEntity(
-            "/api/stream",
-            createMultipartRequest(streamBody),
+            "/api/stream?" + queryString,
+            null,
             String.class
         );
 

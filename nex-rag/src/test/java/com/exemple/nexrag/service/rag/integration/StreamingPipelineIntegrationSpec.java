@@ -83,13 +83,10 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
 
         try {
             // POST /api/stream with pre-ingested context
-            var body = new LinkedMultiValueMap<String, Object>();
-            body.add("query", "NexRAG");
-            body.add("conversationId", conversationId);
-
+            String queryString = "query=NexRAG&conversationId=" + conversationId;
             var response = restTemplate.postForEntity(
-                "/api/stream",
-                createMultipartRequest(body),
+                "/api/stream?" + queryString,
+                null,
                 String.class
             );
 
@@ -166,13 +163,10 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
 
         try {
             // POST /api/stream (will hit mocked error)
-            var body = new LinkedMultiValueMap<String, Object>();
-            body.add("query", "NexRAG");
-            body.add("conversationId", conversationId);
-
+            String queryString = "query=NexRAG&conversationId=" + conversationId;
             var response = restTemplate.postForEntity(
-                "/api/stream",
-                createMultipartRequest(body),
+                "/api/stream?" + queryString,
+                null,
                 String.class
             );
 
@@ -191,13 +185,10 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
             // Test that a fresh request works (recovery)
             registerOpenAiChatStreamStub(); // Re-register success stub
 
-            var body2 = new LinkedMultiValueMap<String, Object>();
-            body2.add("query", "RAG");
-            body2.add("conversationId", conversationId);
-
+            String queryString2 = "query=RAG&conversationId=" + conversationId;
             var response2 = restTemplate.postForEntity(
-                "/api/stream",
-                createMultipartRequest(body2),
+                "/api/stream?" + queryString2,
+                null,
                 String.class
             );
 
@@ -218,8 +209,19 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
     private org.springframework.http.HttpEntity<?> createMultipartRequest(MultiValueMap<String, Object> body) {
         Objects.requireNonNull(body, "body cannot be null");
         var headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(MediaType.APPLICATION_FORM_URLENCODED);
+        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
         return new org.springframework.http.HttpEntity<>(body, headers);
+    }
+
+    private String buildQueryString(MultiValueMap<String, Object> params) {
+        StringBuilder sb = new StringBuilder();
+        params.forEach((key, values) -> {
+            if (!values.isEmpty()) {
+                if (sb.length() > 0) sb.append("&");
+                sb.append(key).append("=").append(values.get(0));
+            }
+        });
+        return sb.toString();
     }
 
     /**

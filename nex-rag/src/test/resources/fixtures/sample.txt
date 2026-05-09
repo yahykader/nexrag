@@ -1,0 +1,4 @@
+NexRAG est un système RAG multimodal.
+Il supporte l'ingestion de documents PDF, DOCX, XLSX, images et texte.
+Les formats supportés incluent tous les documents courants.
+NexRAG offre une solution complète de recherche et génération augmentée par récupération.

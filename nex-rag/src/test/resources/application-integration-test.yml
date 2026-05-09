@@ -1,0 +1,92 @@
+spring:
+  application:
+    name: nexrag-integration-tests
+  datasource:
+    # Surchargé par @DynamicPropertySource dans AbstractIntegrationSpec
+    url: jdbc:postgresql://localhost:5432/nexrag_test
+    username: testuser
+    password: testpass
+    driver-class-name: org.postgresql.Driver
+    # Connection pool settings to prevent connection timeout issues
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQL10Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate.jdbc.batch_size: 20
+      hibernate.order_inserts: true
+  redis:
+    # Surchargé par @DynamicPropertySource dans AbstractIntegrationSpec
+    host: localhost
+    port: 6379
+    password: ""
+    timeout: 2000ms
+    jedis:
+      pool:
+        max-active: 8
+        max-idle: 8
+        min-idle: 0
+  # Disable unnecessary autoconfiguration for tests
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
+      - org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.metrics.MetricsAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.observation.ObservationAutoConfiguration
+      - org.springframework.boot.actuate.autoconfigure.tracing.TracingAutoConfiguration
+
+antivirus:
+  enabled: true
+  # Surchargé par @DynamicPropertySource dans AbstractIntegrationSpec
+  host: localhost
+  port: 3310
+  timeout: 30000
+
+openai:
+  # Surchargé par @DynamicPropertySource dans AbstractIntegrationSpec
+  base-url: http://localhost:8080
+  chat:
+    api-url: http://localhost:8080/v1/chat/completions
+    model: gpt-4o
+    temperature: 0.7
+    max-tokens: 2000
+  embeddings:
+    model: text-embedding-3-small
+    dimension: 1536
+
+server:
+  port: 0  # Utiliser un port aléatoire pour @SpringBootTest(webEnvironment = RANDOM_PORT)
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      show-details: always
+  health:
+    # Disable liveness/readiness probes that might fail during startup
+    livenessState:
+      enabled: false
+    readinessState:
+      enabled: false
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    root: WARN
+    com.exemple.nexrag: INFO
+    org.springframework: WARN
+    org.springframework.boot.test: INFO
+    org.testcontainers: INFO

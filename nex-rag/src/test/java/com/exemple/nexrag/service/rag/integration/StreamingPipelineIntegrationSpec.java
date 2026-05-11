@@ -67,12 +67,12 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
         log.info("✅ Pre-ingest complete, conversationId={}", conversationId);
     }
 
-    // ============ T026: Token Emission Before DONE ============
+    // ============ T026: Token Emission Before Completion ============
 
     @Test
-    @DisplayName("T026: Émettre tokens avant signal DONE (< 5s premier token, SC-004)")
+    @DisplayName("T026: Émettre tokens avant signal completion (< 5s premier token, SC-004)")
     void devraitEmettreTokensAvantSignalDeFin() throws Exception {
-        log.info("🧪 T026: Testing token emission before DONE");
+        log.info("🧪 T026: Testing token emission before completion");
 
         String queryString = "query=NexRAG&conversationId=" + conversationId;
 
@@ -92,17 +92,17 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
 
         String sseBody = streamResponse.getBody();
 
-        // Verify SSE format with data: prefix
-        assertThat(sseBody).contains("data:");
+        // Verify SSE format with event: prefix
+        assertThat(sseBody).contains("event:");
 
-        // Verify tokens appear before DONE marker
-        int dataIndex = sseBody.indexOf("data:");
-        int doneIndex = sseBody.indexOf("[DONE]");
+        // Verify token events appear before completion event
+        int tokenEventIndex = sseBody.indexOf("event:token");
+        int completeEventIndex = sseBody.indexOf("event:complete");
 
-        assertThat(dataIndex).isGreaterThanOrEqualTo(0);
-        assertThat(doneIndex).isGreaterThan(0);
-        assertThat(dataIndex).isLessThan(doneIndex);
-        log.info("✅ Tokens emitted before DONE signal (data at {}, DONE at {})", dataIndex, doneIndex);
+        assertThat(tokenEventIndex).isGreaterThanOrEqualTo(0);
+        assertThat(completeEventIndex).isGreaterThan(0);
+        assertThat(tokenEventIndex).isLessThan(completeEventIndex);
+        log.info("✅ Tokens emitted before completion signal (token at {}, complete at {})", tokenEventIndex, completeEventIndex);
 
         // Verify first token latency < 5s (SC-004)
         assertThat(firstTokenLatency).isLessThan(Duration.ofSeconds(5));
@@ -111,38 +111,42 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
         log.info("✅ Token emission test passed");
     }
 
-    // ============ T027: Error Handling Mid-Stream ============
+    // ============ T027: Stream Stability and Completion ============
 
     @Test
-    @DisplayName("T027: Émettre événement ERROR sans plantage (mid-stream error recovery)")
+    @DisplayName("T027: Émettre événement complete sans interruption (stream stability)")
     void devraitEmettreEvenementErreurSansPlantage() throws Exception {
-        log.info("🧪 T027: Testing mid-stream error handling");
+        log.info("🧪 T027: Testing stream stability and completion");
 
         String queryString = "query=NexRAG&conversationId=" + conversationId;
 
-        // Request stream response and verify it handles gracefully
+        // Request stream response and verify it completes gracefully
         var streamResponse = restTemplate.postForEntity(
             "/api/stream?" + queryString,
             null,
             String.class
         );
 
-        // Stream should return 200 OK even with potential errors
+        // Stream should return 200 OK and complete successfully
         assertThat(streamResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(streamResponse.getBody()).isNotNull();
 
         String sseBody = streamResponse.getBody();
 
-        // Verify stream has SSE format (data: prefix)
-        assertThat(sseBody).contains("data:");
+        // Verify stream has SSE event format
+        assertThat(sseBody).contains("event:");
 
-        // Verify stream has completion marker
-        assertThat(sseBody).contains("[DONE]");
+        // Verify stream has proper completion marker (event:complete)
+        assertThat(sseBody).contains("event:complete");
 
-        // Verify no uncaught exceptions (response is properly formatted)
-        assertThat(sseBody.length()).isGreaterThan(0);
+        // Verify stream contains expected event types
+        assertThat(sseBody).contains("event:connected");
+        assertThat(sseBody).contains("event:token").orContains("event:generation_complete");
 
-        log.info("✅ Error handling test passed: stream remained stable with {} bytes", sseBody.length());
+        // Verify no uncaught exceptions (response is properly formatted and complete)
+        assertThat(sseBody.length()).isGreaterThan(100); // Should have substantial content
+
+        log.info("✅ Stream stability test passed: stream completed with {} bytes", sseBody.length());
     }
 
     // ============ Helper Methods ============

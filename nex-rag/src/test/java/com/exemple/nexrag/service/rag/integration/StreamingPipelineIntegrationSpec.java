@@ -141,7 +141,9 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
 
         // Verify stream contains expected event types
         assertThat(sseBody).contains("event:connected");
-        assertThat(sseBody).contains("event:token").orContains("event:generation_complete");
+        // Verify either token events or generation completion
+        boolean hasTokenOrGeneration = sseBody.contains("event:token") || sseBody.contains("event:generation_complete");
+        assertThat(hasTokenOrGeneration).isTrue();
 
         // Verify no uncaught exceptions (response is properly formatted and complete)
         assertThat(sseBody.length()).isGreaterThan(100); // Should have substantial content

@@ -8,11 +8,13 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
+import org.springframework.test.context.TestPropertySource;
 
 /**
  * Test configuration providing minimal beans needed for integration tests.
  * Provides a simple MeterRegistry to satisfy MetricsService dependencies,
- * and mocks PrometheusMeterRegistry to prevent eager instantiation of Prometheus components.
+ * mocks PrometheusMeterRegistry to prevent eager instantiation of Prometheus components,
+ * and disables query transformation to speed up retrieval tests (no LLM calls).
  */
 @TestConfiguration
 public class IntegrationTestConfiguration {

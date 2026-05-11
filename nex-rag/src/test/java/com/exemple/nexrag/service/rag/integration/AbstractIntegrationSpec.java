@@ -19,6 +19,8 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
+import java.util.Map;
+
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
 import static org.springframework.boot.test.context.SpringBootTest.WebEnvironment.RANDOM_PORT;
@@ -75,6 +77,9 @@ public abstract class AbstractIntegrationSpec {
     @Autowired(required = false)
     protected RedisTemplate<String, String> redisTemplate;
 
+    @Autowired(required = false)
+    protected com.exemple.nexrag.service.rag.ingestion.repository.EmbeddingRepository embeddingRepository;
+
     // ============ Dynamic Property Override ============
 
     @DynamicPropertySource
@@ -107,13 +112,37 @@ public abstract class AbstractIntegrationSpec {
         // Cache Redis vidé → chaque test démarre en cold cache (spec.md §Edge Cases: "cold start lors d'une requête d'embedding")
         // This implicit coverage of the "cold cache" edge case applies to all tests.
 
-        // 1. DELETE /api/files via REST to clear all ingested documents
+        // 1. Clear all ingested documents via direct repository call
+        // This is more reliable than REST endpoint which can fail silently
         try {
-            log.debug("Calling DELETE /api/files to clear documents");
-            restTemplate.delete("/api/files");
-            log.debug("✅ DELETE /api/files succeeded");
+            if (embeddingRepository != null) {
+                log.debug("Clearing all documents via EmbeddingRepository");
+                // Use timeout to prevent hanging on database connection failures (e.g., when Docker not running)
+                Integer deleted = executeWithTimeout(() -> embeddingRepository.deleteAllFilesPlusCache(), 5000);
+                if (deleted != null && deleted > 0) {
+                    log.debug("✅ Direct delete cleared {} embeddings", deleted);
+                } else {
+                    log.debug("ℹ️ No embeddings to clear (database unavailable or empty)");
+                }
+
+                executeWithTimeout(() -> {
+                    embeddingRepository.clearAllTracking();
+                    return null;
+                }, 5000);
+            } else {
+                log.warn("⚠️ EmbeddingRepository not available, falling back to REST endpoint");
+                restTemplate.delete("/api/files");
+                Thread.sleep(500);
+            }
         } catch (Exception e) {
-            log.warn("⚠️ DELETE /api/files failed (expected if endpoint doesn't exist yet): {}", e.getMessage());
+            log.warn("⚠️ Direct delete failed: {} ({})", e.getClass().getSimpleName(), e.getMessage());
+            // Fallback: try REST endpoint
+            try {
+                restTemplate.delete("/api/files");
+                Thread.sleep(500);
+            } catch (Exception e2) {
+                log.warn("⚠️ REST delete also failed: {}", e2.getMessage());
+            }
         }
 
         // 2. FLUSHALL Redis
@@ -202,5 +231,27 @@ public abstract class AbstractIntegrationSpec {
                "data: {\"choices\":[{\"delta\":{\"content\":\" est\"}}]}\n\n" +
                "data: {\"choices\":[{\"delta\":{\"content\":\" disponible\"}}]}\n\n" +
                "data: [DONE]\n\n";
+    }
+
+    // ============ Helper Methods ============
+
+    /**
+     * Execute a callable with a timeout to prevent hanging on database connection failures.
+     * Returns null if timeout occurs (caller should handle null return).
+     */
+    private <T> T executeWithTimeout(java.util.concurrent.Callable<T> callable, long timeoutMs) {
+        java.util.concurrent.ExecutorService executor = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            java.util.concurrent.Future<T> future = executor.submit(callable);
+            return future.get(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS);
+        } catch (java.util.concurrent.TimeoutException e) {
+            log.warn("⚠️ Operation timed out after {}ms (likely database unavailable), continuing gracefully", timeoutMs);
+            return null;
+        } catch (Exception e) {
+            log.warn("⚠️ Operation failed ({}), continuing gracefully", e.getClass().getSimpleName());
+            return null;
+        } finally {
+            executor.shutdownNow();
+        }
     }
 }

@@ -2,6 +2,7 @@ package com.exemple.nexrag.service.rag.integration;
 
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.core.io.ClassPathResource;
@@ -27,6 +28,7 @@ import static org.assertj.core.api.Assertions.*;
  * Coverage: US-4 scénarios 1-2 (rate limiting + fail-open), FR-010 (configurable limits).
  */
 @Slf4j
+@Tag("slow")
 @DisplayName("DOIT valider le rate limiting avec fail-open quand Redis indisponible")
 public class RateLimitIntegrationSpec extends AbstractIntegrationSpec {
 

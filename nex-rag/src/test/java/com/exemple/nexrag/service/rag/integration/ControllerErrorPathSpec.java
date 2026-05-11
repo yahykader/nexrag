@@ -3,6 +3,7 @@ package com.exemple.nexrag.service.rag.integration;
 import com.exemple.nexrag.IntegrationTestConfiguration;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -27,6 +28,7 @@ import static org.mockito.Mockito.when;
  * - HTTP status codes match error types
  */
 @Slf4j
+@Tag("slow")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("integration-test")
 @Import(IntegrationTestConfiguration.class)

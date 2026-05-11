@@ -3,6 +3,7 @@ package com.exemple.nexrag.service.rag.integration;
 import com.exemple.nexrag.dto.batch.BatchInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
@@ -30,6 +31,7 @@ import static org.assertj.core.api.Assertions.*;
  *           SC-008 (isolation between runs).
  */
 @Slf4j
+@Tag("slow")
 @DisplayName("DOIT valider le pipeline complet ingestion→requête→streaming")
 public class FullRagPipelineIntegrationSpec extends AbstractIntegrationSpec {
 

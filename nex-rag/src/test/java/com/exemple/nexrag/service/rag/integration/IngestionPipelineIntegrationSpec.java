@@ -4,6 +4,7 @@ import com.exemple.nexrag.dto.batch.BatchInfo;
 import com.exemple.nexrag.service.rag.ingestion.repository.EmbeddingRepository;
 import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ClassPathResource;
@@ -41,6 +42,7 @@ import static org.assertj.core.api.Assertions.*;
  *           US-1 scénarios 3 (EICAR) et 4 (concurrence).
  */
 @Slf4j
+@Tag("slow")
 @DisplayName("DOIT valider le pipeline d'ingestion bout-en-bout")
 public class IngestionPipelineIntegrationSpec extends AbstractIntegrationSpec {
 

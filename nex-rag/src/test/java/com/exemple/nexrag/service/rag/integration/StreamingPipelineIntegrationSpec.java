@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.awaitility.Awaitility;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,7 @@ import static org.assertj.core.api.Assertions.*;
  *           US-3 scénario 2 (error handling mid-stream).
  */
 @Slf4j
+@Tag("slow")
 @DisplayName("DOIT valider le streaming SSE de réponse")
 public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
 

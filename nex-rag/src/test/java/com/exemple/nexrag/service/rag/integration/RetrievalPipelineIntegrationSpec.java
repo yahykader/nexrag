@@ -17,6 +17,10 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -168,6 +172,135 @@ public class RetrievalPipelineIntegrationSpec extends AbstractIntegrationSpec {
         }
 
         log.info("✅ Conversation history correctly preserved");
+    }
+
+    // ============ T024a: Zero Retrieval Results Edge Case ============
+
+    @Test
+    @DisplayName("T024a: Retourner passages vide si query ne matche rien")
+    void devraitRetournerPassagesVideSiZeroMatches() {
+        log.info("🧪 T024a: Testing zero retrieval results");
+
+        // Query with words that definitely don't match any document
+        var response = restTemplate.getForEntity(
+            "/api/search?query=XYZABC_NONEXISTENT_QUERY_12345&conversationId=" + conversationId,
+            Map.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getBody()).isNotNull();
+
+        var body = response.getBody();
+        assertThat(body).containsKey("passages");
+
+        Object passagesObj = body.get("passages");
+        if (passagesObj instanceof java.util.List<?> passages) {
+            // Empty passages list is valid when no matches found
+            assertThat(passages).isEmpty();
+            log.info("✅ Zero results correctly returned as empty list");
+        }
+
+        // Verify response still has conversation ID (stateless handling)
+        if (body.containsKey("conversationId")) {
+            assertThat(body.get("conversationId")).isEqualTo(conversationId);
+        }
+
+        log.info("✅ Zero retrieval results test passed");
+    }
+
+    // ============ T024b: Multiple Conversation Turns ============
+
+    @Test
+    @DisplayName("T024b: Préserver historique sur 5+ tours consécutifs")
+    void devraitPreserverHistoriqueMultipleTours() {
+        log.info("🧪 T024b: Testing multi-turn conversation history (5+ queries)");
+
+        String[] queries = {
+            "NexRAG",
+            "multimodal",
+            "RAG",
+            "ingestion",
+            "retrieval"
+        };
+
+        int successfulQueries = 0;
+
+        for (int i = 0; i < queries.length; i++) {
+            try {
+                var response = restTemplate.getForEntity(
+                    "/api/search?query=" + queries[i] + "&conversationId=" + conversationId,
+                    Map.class
+                );
+
+                assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+                assertThat(response.getBody()).isNotNull();
+
+                Map<String, Object> body = response.getBody();
+                assertThat(body).containsKey("passages");
+
+                if (body.containsKey("conversationId")) {
+                    assertThat(body.get("conversationId")).isEqualTo(conversationId);
+                }
+
+                successfulQueries++;
+                log.info("✅ Query {} ({}) succeeded", i + 1, queries[i]);
+
+            } catch (Exception e) {
+                log.warn("⚠️ Query {} ({}) failed: {}", i + 1, queries[i], e.getMessage());
+            }
+        }
+
+        // All queries should succeed with conversation maintained
+        assertThat(successfulQueries).isEqualTo(queries.length);
+        log.info("✅ Multi-turn conversation test passed ({} turns)", queries.length);
+    }
+
+    // ============ T024c: Concurrent Same-Conversation Queries ============
+
+    @Test
+    @DisplayName("T024c: Gérer requêtes concurrentes sur même conversationId")
+    void devraitGererRequetesConcurrentesMemeConversation() throws Exception {
+        log.info("🧪 T024c: Testing concurrent queries on same conversation");
+
+        ExecutorService executor = java.util.concurrent.Executors.newFixedThreadPool(3);
+        java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(3);
+        java.util.concurrent.atomic.AtomicInteger successCount = new java.util.concurrent.atomic.AtomicInteger(0);
+
+        try {
+            String[] queries = { "NexRAG", "multimodal", "RAG" };
+
+            for (int i = 0; i < 3; i++) {
+                final int queryIndex = i;
+                executor.submit(() -> {
+                    try {
+                        var response = restTemplate.getForEntity(
+                            "/api/search?query=" + queries[queryIndex] + "&conversationId=" + conversationId,
+                            Map.class
+                        );
+
+                        if (response.getStatusCode() == HttpStatus.OK) {
+                            successCount.incrementAndGet();
+                            log.info("✅ Concurrent query {} succeeded", queryIndex + 1);
+                        }
+                    } catch (Exception e) {
+                        log.warn("⚠️ Concurrent query {} failed: {}", queryIndex + 1, e.getMessage());
+                    } finally {
+                        latch.countDown();
+                    }
+                });
+            }
+
+            // Wait for all queries to complete (max 30 seconds)
+            boolean completed = latch.await(30, java.util.concurrent.TimeUnit.SECONDS);
+            assertThat(completed).isTrue();
+
+            // Verify all concurrent queries succeeded
+            assertThat(successCount.get()).isEqualTo(3);
+            log.info("✅ Concurrent conversation queries test passed");
+
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     // ============ T042: Empty Vector Store Edge Case ============

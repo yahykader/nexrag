@@ -181,6 +181,132 @@ public class FullRagPipelineIntegrationSpec extends AbstractIntegrationSpec {
         log.info("⚠️ Test completed with known pgvector deletion limitation (see comments)");
     }
 
+    // ============ T034: Response Schema Validation for /api/ingest ============
+
+    @Test
+    @DisplayName("T034: Valider schéma réponse /api/ingest (JSON structure)")
+    void devraitValiderSchemaBatchInfoResponse() throws IOException {
+        log.info("🧪 T034: Testing /api/ingest response schema");
+
+        var body = new LinkedMultiValueMap<String, Object>();
+        body.add("file", new ClassPathResource("fixtures/sample.pdf"));
+
+        var response = restTemplate.postForEntity(
+            "/api/ingest",
+            createMultipartRequest(body),
+            BatchInfo.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        assertThat(response.getHeaders().getContentType()).isNotNull();
+        assertThat(response.getHeaders().getContentType().toString())
+            .contains("application/json");
+
+        BatchInfo batch = response.getBody();
+        assertThat(batch).isNotNull();
+
+        // Validate BatchInfo record structure
+        assertThat(batch.batchId()).isNotBlank();
+        assertThat(batch.filename()).isNotBlank();
+        assertThat(batch.mimeType()).isNotBlank();
+        assertThat(batch.timestamp()).isNotNull();
+        assertThat(batch.textEmbeddings()).isNotNull();
+        assertThat(batch.imageEmbeddings()).isNotNull();
+
+        log.info("✅ Batch response schema valid: batchId={}", batch.batchId());
+    }
+
+    // ============ T035: Response Schema Validation for /api/search ============
+
+    @Test
+    @DisplayName("T035: Valider schéma réponse /api/search (structure passages)")
+    void devraitValiderSchemaSearchResponse() throws IOException {
+        log.info("🧪 T035: Testing /api/search response schema");
+
+        // Pre-ingest to have data
+        var ingestBody = new LinkedMultiValueMap<String, Object>();
+        ingestBody.add("file", new ClassPathResource("fixtures/sample.pdf"));
+        restTemplate.postForEntity(
+            "/api/ingest",
+            createMultipartRequest(ingestBody),
+            BatchInfo.class
+        );
+
+        var response = restTemplate.getForEntity(
+            "/api/search?query=test&conversationId=test-conv",
+            Map.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        assertThat(response.getHeaders().getContentType()).isNotNull();
+        assertThat(response.getHeaders().getContentType().toString())
+            .contains("application/json");
+
+        Map<String, Object> searchResponse = response.getBody();
+        assertThat(searchResponse).isNotNull();
+
+        // Validate search response structure
+        assertThat(searchResponse).containsKey("query");
+        assertThat(searchResponse).containsKey("passages");
+        assertThat(searchResponse).containsKey("conversationId");
+        assertThat(searchResponse).containsKey("totalPassages");
+
+        assertThat(searchResponse.get("query")).isNotNull();
+        assertThat(searchResponse.get("conversationId")).isEqualTo("test-conv");
+
+        // Validate passages structure
+        Object passagesObj = searchResponse.get("passages");
+        assertThat(passagesObj).isInstanceOf(java.util.List.class);
+
+        java.util.List<?> passages = (java.util.List<?>) passagesObj;
+        if (!passages.isEmpty()) {
+            Object firstPassage = passages.get(0);
+            assertThat(firstPassage).isInstanceOf(java.util.Map.class);
+
+            Map<String, Object> passage = (Map<String, Object>) firstPassage;
+            assertThat(passage).containsKeys("id", "content", "score");
+            assertThat(passage.get("score")).isInstanceOf(Number.class);
+        }
+
+        log.info("✅ Search response schema valid: {} passages", passages.size());
+    }
+
+    // ============ T036: Response Schema Validation for /api/stream ============
+
+    @Test
+    @DisplayName("T036: Valider schéma réponse /api/stream (SSE format)")
+    void devraitValiderSchemaSseStreamResponse() throws IOException {
+        log.info("🧪 T036: Testing /api/stream SSE format schema");
+
+        var response = restTemplate.postForEntity(
+            "/api/stream?query=test&conversationId=test-stream",
+            null,
+            String.class
+        );
+
+        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+
+        // Validate SSE content-type header
+        assertThat(response.getHeaders().getContentType()).isNotNull();
+        assertThat(response.getHeaders().getContentType().toString())
+            .contains("text/event-stream");
+
+        // Validate SSE headers
+        assertThat(response.getHeaders().getCacheControl())
+            .contains("no-cache");
+
+        String sseBody = response.getBody();
+        assertThat(sseBody).isNotNull();
+
+        // Validate SSE format: "data: " prefix on each line
+        assertThat(sseBody).contains("data:");
+
+        // Validate SSE termination: [DONE] marker
+        assertThat(sseBody).contains("[DONE]");
+
+        log.info("✅ SSE response schema valid (headers + format)");
+    }
+
     // ============ Helper Methods ============
 
     /**

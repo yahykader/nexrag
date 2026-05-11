@@ -71,28 +71,125 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
 
     @Test
     @DisplayName("T026: Émettre tokens avant signal DONE (< 5s premier token, SC-004)")
-    void devraitEmettreTokensAvantSignalDeFin() {
+    void devraitEmettreTokensAvantSignalDeFin() throws Exception {
         log.info("🧪 T026: Testing token emission before DONE");
 
-        // NOTE: SSE streaming tests using RestTemplate fail with PrematureCloseException.
-        // This is due to RestTemplate not properly handling streaming responses with chunked encoding.
-        // Better approach: Use WebClient with streaming support or reactive HTTP client.
-        // Skipping test pending refactor of streaming test infrastructure.
+        String queryString = "query=NexRAG&conversationId=" + conversationId;
 
-        log.warn("⚠️ Test skipped: Requires WebClient for proper SSE streaming support");
+        // Use Awaitility to wait for SSE response with timeout
+        AtomicBoolean tokensEmitted = new AtomicBoolean(false);
+        AtomicBoolean doneSignalReceived = new AtomicBoolean(false);
+
+        Awaitility.await()
+            .atMost(java.time.Duration.ofSeconds(10))
+            .pollInterval(java.time.Duration.ofMillis(100))
+            .untilAsserted(() -> {
+                try {
+                    Instant streamStart = Instant.now();
+
+                    // Send streaming request
+                    var streamResponse = restTemplate.postForEntity(
+                        "/api/stream?" + queryString,
+                        null,
+                        String.class
+                    );
+
+                    Duration firstTokenLatency = Duration.between(streamStart, Instant.now());
+
+                    assertThat(streamResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+                    assertThat(streamResponse.getBody()).isNotNull();
+
+                    String sseBody = streamResponse.getBody();
+
+                    // Verify SSE format with data: prefix
+                    assertThat(sseBody).contains("data:");
+                    tokensEmitted.set(true);
+
+                    // Verify tokens appear before DONE marker
+                    int dataIndex = sseBody.indexOf("data:");
+                    int doneIndex = sseBody.indexOf("[DONE]");
+
+                    if (doneIndex > 0 && dataIndex >= 0) {
+                        assertThat(dataIndex).isLessThan(doneIndex);
+                        doneSignalReceived.set(true);
+                        log.info("✅ Tokens emitted before DONE signal");
+                    }
+
+                    // Verify first token latency < 5s
+                    assertThat(firstTokenLatency).isLessThan(Duration.ofSeconds(5));
+                    log.info("✅ First token received in {}ms (SC-004)", firstTokenLatency.toMillis());
+
+                } catch (AssertionError e) {
+                    log.debug("Assertion not yet satisfied: {}", e.getMessage());
+                    throw e;
+                }
+            });
+
+        assertThat(tokensEmitted.get()).isTrue();
+        log.info("✅ Token emission test passed");
     }
 
     // ============ T027: Error Handling Mid-Stream ============
 
     @Test
     @DisplayName("T027: Émettre événement ERROR sans plantage (mid-stream error recovery)")
-    void devraitEmettreEvenementErreurSansPlantage() {
+    void devraitEmettreEvenementErreurSansPlantage() throws Exception {
         log.info("🧪 T027: Testing mid-stream error handling");
 
-        // NOTE: Same issue as T026 - RestTemplate SSE streaming is problematic.
-        // Skipping pending refactor with WebClient for proper streaming support.
+        // Set up WireMock to return error mid-stream
+        OPEN_AI_MOCK.resetAll();
 
-        log.warn("⚠️ Test skipped: Requires WebClient for proper SSE streaming support");
+        // Stub with error event
+        String sseBodyWithError = "data: {\"choices\":[{\"delta\":{\"content\":\"First\"}}]}\n\n" +
+                                  "data: {\"error\":{\"message\":\"Internal server error\"}}\n\n" +
+                                  "data: [DONE]\n\n";
+
+        OPEN_AI_MOCK.stubFor(post(urlPathEqualTo("/v1/chat/completions"))
+            .willReturn(aResponse()
+                .withStatus(200)
+                .withHeader("Content-Type", "text/event-stream")
+                .withBody(sseBodyWithError)
+            )
+        );
+
+        String queryString = "query=NexRAG&conversationId=" + conversationId;
+
+        // Stream should not crash on error event
+        AtomicBoolean errorHandled = new AtomicBoolean(false);
+
+        Awaitility.await()
+            .atMost(java.time.Duration.ofSeconds(10))
+            .pollInterval(java.time.Duration.ofMillis(100))
+            .untilAsserted(() -> {
+                try {
+                    var streamResponse = restTemplate.postForEntity(
+                        "/api/stream?" + queryString,
+                        null,
+                        String.class
+                    );
+
+                    // Even with error events, response should be 200 (stream was established)
+                    assertThat(streamResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+                    assertThat(streamResponse.getBody()).isNotNull();
+
+                    String sseBody = streamResponse.getBody();
+
+                    // Verify stream continued despite error
+                    assertThat(sseBody).contains("data:");
+
+                    if (sseBody.contains("[DONE]")) {
+                        errorHandled.set(true);
+                        log.info("✅ Stream recovered from mid-stream error");
+                    }
+
+                } catch (Exception e) {
+                    log.debug("Waiting for error recovery: {}", e.getMessage());
+                    throw new AssertionError("Error handling test failed", e);
+                }
+            });
+
+        assertThat(errorHandled.get()).isTrue();
+        log.info("✅ Error handling test passed");
     }
 
     // ============ Helper Methods ============

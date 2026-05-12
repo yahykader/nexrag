@@ -59,7 +59,7 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
 
         // Wait for async ingestion to complete (first test only)
         try {
-            Thread.sleep(500);
+            Thread.sleep(ASYNC_INGESTION_WAIT_MS);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         }

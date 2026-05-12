@@ -52,7 +52,7 @@ public class FullRagPipelineIntegrationSpec extends AbstractIntegrationSpec {
 
         // Wait for async ingestion to complete
         log.info("⏳ Waiting for async ingestion to complete...");
-        Thread.sleep(1500); // Wait 1.5s for PDF processing and embedding
+        Thread.sleep(FULL_PIPELINE_WAIT_MS); // Wait 1.5s for PDF processing and embedding
 
         // === PHASE 2: RETRIEVAL ===
         log.info("Phase 2: Querying for passages...");

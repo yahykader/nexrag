@@ -9,11 +9,9 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
 import io.github.bucket4j.distributed.proxy.ProxyManager;
 
 import java.io.IOException;
-import java.util.Objects;
 
 import static org.assertj.core.api.Assertions.*;
 
@@ -75,15 +73,25 @@ public class RateLimitIntegrationSpec extends AbstractIntegrationSpec {
 
         log.info("✅ Rate limiting test: {} successful, {} rate-limited", successCount, rateLimitedCount);
 
-        // Expect at least some requests to succeed and potentially some to be rate-limited
-        assertThat(successCount).isGreaterThanOrEqualTo(1); // At least first batch succeeds
+        // Validate rate limit enforcement:
+        // With 10/min limit and 12 rapid requests, expect:
+        // - First 10 requests succeed (202 ACCEPTED or 409 CONFLICT)
+        // - Requests 11-12 are rate-limited (429 Too Many Requests)
+        assertThat(successCount).isGreaterThanOrEqualTo(10)
+            .as("At least 10 requests should succeed within the 10/min quota");
 
-        // If rate limiting is enabled, we should see at least one 429 response
-        // If disabled in test config, all will succeed
-        if (rateLimitedCount > 0) {
-            log.info("✅ Rate limiting enforced: {} requests rejected with 429", rateLimitedCount);
+        // If rate limiting is active (strict mode), we should see exactly 2 rate-limited
+        // If rate limiting is permissive, may see 0 (depends on timing/config)
+        // Either way, total should be 12
+        assertThat(successCount + rateLimitedCount).isEqualTo(12)
+            .as("All 12 requests should be accounted for (success or rate-limited)");
+
+        if (rateLimitedCount >= 2) {
+            log.info("✅ Rate limiting strictly enforced: {} requests exceeded quota", rateLimitedCount);
+        } else if (rateLimitedCount > 0) {
+            log.info("✅ Rate limiting partially enforced: {} requests rate-limited (timing-dependent)", rateLimitedCount);
         } else {
-            log.info("✅ Rate limiting disabled in test config (all {} requests accepted)", successCount);
+            log.info("ℹ️ Rate limiting disabled or not triggered in test config (all {} requests accepted)", successCount);
         }
     }
 
@@ -119,17 +127,5 @@ public class RateLimitIntegrationSpec extends AbstractIntegrationSpec {
         assertThat(response.getStatusCode().value()).isNotEqualTo(500); // Internal Server Error
 
         log.info("✅ Fail-open succeeded: request processed despite missing Redis");
-    }
-
-    // ============ Helper Methods ============
-
-    /**
-     * Create a multipart request body.
-     */
-    private org.springframework.http.HttpEntity<?> createMultipartRequest(MultiValueMap<String, Object> body) {
-        Objects.requireNonNull(body, "body cannot be null");
-        var headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        return new org.springframework.http.HttpEntity<>(body, headers);
     }
 }

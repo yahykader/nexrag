@@ -18,7 +18,6 @@ import org.springframework.util.MultiValueMap;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -568,17 +567,5 @@ public class IngestionPipelineIntegrationSpec extends AbstractIntegrationSpec {
         // With ClamAV available, request should succeed
         assertThat(response.getStatusCode()).isIn(HttpStatus.ACCEPTED, HttpStatus.CONFLICT);
         log.info("✅ ClamAV availability confirmed (ingestion processed)");
-    }
-
-    // ============ Helper Methods ============
-
-    /**
-     * Create a multipart request body from LinkedMultiValueMap.
-     */
-    private org.springframework.http.HttpEntity<?> createMultipartRequest(MultiValueMap<String, Object> body) {
-        Objects.requireNonNull(body, "body cannot be null");
-        var headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        return new org.springframework.http.HttpEntity<>(body, headers);
     }
 }

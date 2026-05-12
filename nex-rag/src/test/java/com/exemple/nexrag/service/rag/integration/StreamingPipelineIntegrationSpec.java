@@ -18,7 +18,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -154,16 +153,6 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
     }
 
     // ============ Helper Methods ============
-
-    /**
-     * Create a multipart request body.
-     */
-    private org.springframework.http.HttpEntity<?> createMultipartRequest(MultiValueMap<String, Object> body) {
-        Objects.requireNonNull(body, "body cannot be null");
-        var headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        return new org.springframework.http.HttpEntity<>(body, headers);
-    }
 
     private String buildQueryString(MultiValueMap<String, Object> params) {
         StringBuilder sb = new StringBuilder();

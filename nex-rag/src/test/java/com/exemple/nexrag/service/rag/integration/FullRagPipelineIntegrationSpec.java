@@ -16,7 +16,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.*;
@@ -309,17 +308,5 @@ public class FullRagPipelineIntegrationSpec extends AbstractIntegrationSpec {
         assertThat(hasCompletion).isTrue();
 
         log.info("✅ SSE response schema valid (headers + format)");
-    }
-
-    // ============ Helper Methods ============
-
-    /**
-     * Create a multipart request body.
-     */
-    private org.springframework.http.HttpEntity<?> createMultipartRequest(MultiValueMap<String, Object> body) {
-         Objects.requireNonNull(body, "body cannot be null");
-        var headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        return new org.springframework.http.HttpEntity<>(body, headers);
     }
 }

@@ -127,15 +127,4 @@ public class ControllerErrorPathSpec extends AbstractIntegrationSpec {
 
         log.info("✅ Parameter validation handled: status={}", response.getStatusCode());
     }
-
-    // ============ Helper Methods ============
-
-    /**
-     * Create a multipart request body.
-     */
-    private org.springframework.http.HttpEntity<?> createMultipartRequest(MultiValueMap<String, Object> body) {
-        var headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        return new org.springframework.http.HttpEntity<>(body, headers);
-    }
 }

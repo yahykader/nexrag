@@ -17,7 +17,6 @@ import org.springframework.util.MultiValueMap;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -324,17 +323,5 @@ public class RetrievalPipelineIntegrationSpec extends AbstractIntegrationSpec {
         // Real-world mitigation: Use separate database per test or fix LangChain4j EmbeddingStore configuration.
 
         log.warn("⚠️ Test skipped due to known pgvector isolation limitation (see comments)");
-    }
-
-    // ============ Helper Methods ============
-
-    /**
-     * Create a multipart request body.
-     */
-    private org.springframework.http.HttpEntity<?> createMultipartRequest(MultiValueMap<String, Object> body) {
-        Objects.requireNonNull(body, "body cannot be null");
-        var headers = new org.springframework.http.HttpHeaders();
-        headers.setContentType(MediaType.MULTIPART_FORM_DATA);
-        return new org.springframework.http.HttpEntity<>(body, headers);
     }
 }

@@ -2,6 +2,7 @@ package com.exemple.nexrag.service.rag.ingestion.repository;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -34,6 +35,12 @@ public class EmbeddingQueryDao {
 
     private static final String SQL_COUNT_ALL =
         "SELECT COUNT(*) FROM %s";
+
+    private static final String SQL_DELETE_ALL =
+        "DELETE FROM %s";
+
+    private static final String SQL_DELETE_BY_BATCH =
+        "DELETE FROM %s WHERE metadata->>'batchId' = ?";
 
     private final JdbcTemplate jdbcTemplate;
 
@@ -85,6 +92,34 @@ public class EmbeddingQueryDao {
             return count != null ? count : 0;
         } catch (Exception e) {
             log.error("❌ Erreur countAll — table={}", tableName, e);
+            return 0;
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Suppression via SQL (plus fiable que store.remove())
+    // -------------------------------------------------------------------------
+
+    public int deleteAllViaSQL(String tableName) {
+        try {
+            int deleted = jdbcTemplate.update(sql(SQL_DELETE_ALL, tableName));
+            log.info("✅ [SQL] {} embeddings supprimés via DELETE FROM {}", deleted, tableName);
+            return deleted;
+        } catch (DataAccessException e) {
+            log.warn("⚠️ [SQL] Échec connexion BD pour deleteAllViaSQL (database unavailable), skipped gracefully — table={}",
+                tableName);
+            return 0;
+        }
+    }
+
+    public int deleteByBatchIdViaSQL(String tableName, String batchId) {
+        try {
+            int deleted = jdbcTemplate.update(sql(SQL_DELETE_BY_BATCH, tableName), batchId);
+            log.info("✅ [SQL] {} embeddings supprimés pour batch {} via DELETE", deleted, batchId);
+            return deleted;
+        } catch (DataAccessException e) {
+            log.warn("⚠️ [SQL] Échec connexion BD pour deleteByBatchIdViaSQL (database unavailable), skipped gracefully — table={}, batchId={}",
+                tableName, batchId);
             return 0;
         }
     }

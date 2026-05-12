@@ -74,7 +74,9 @@ public class EmbeddingStoreDeleter {
     // -------------------------------------------------------------------------
 
     /**
-     * Supprime tous les embeddings d'un batch depuis le store.
+     * Supprime tous les embeddings d'un batch via SQL DELETE.
+     * Utilise une suppression SQL directe plutôt que d'appeler store.remove()
+     * pour la même raison que deleteAll() — fiabilité dans Testcontainers.
      *
      * @return nombre d'embeddings supprimés
      */
@@ -84,56 +86,42 @@ public class EmbeddingStoreDeleter {
             String batchId,
             String label) {
 
-        log.info("🗑️ [{}] Suppression batch : {}", label, batchId);
-        List<String> ids = queryDao.findIdsByBatchId(tableName, batchId);
+        log.info("🗑️ [{}] Suppression batch : {} (via SQL DELETE)", label, batchId);
 
-        if (ids.isEmpty()) {
+        int deleted = queryDao.deleteByBatchIdViaSQL(tableName, batchId);
+
+        if (deleted > 0) {
+            log.info("✅ [{}] {} embeddings supprimés du batch : {}", label, deleted, batchId);
+        } else {
             log.warn("⚠️ [{}] Aucun embedding trouvé pour batch : {}", label, batchId);
-            return 0;
         }
 
-        int deleted = deleteByIds(store, ids, label);
-        log.info("✅ [{}] {} embeddings supprimés du batch : {}", label, deleted, batchId);
         return deleted;
     }
 
     // -------------------------------------------------------------------------
-    // Suppression globale (via SQL, par micro-batches)
+    // Suppression globale (via SQL directe — plus fiable que store.remove())
     // -------------------------------------------------------------------------
 
     /**
-     * Supprime tous les embeddings d'une table via des micro-batches.
+     * Supprime tous les embeddings d'une table via SQL DELETE.
+     * Utilise une suppression SQL directe plutôt que d'appeler store.remove()
+     * car LangChain4j PgVectorEmbeddingStore.remove() peut ne pas fonctionner
+     * correctement dans certains contextes (notamment les tests Testcontainers).
      *
      * @return nombre total d'embeddings supprimés
      */
     public int deleteAll(EmbeddingStore<TextSegment> store, String tableName, String label) {
-        log.info("🗑️ [{}] Suppression globale — table : {}", label, tableName);
+        log.info("🗑️ [{}] Suppression globale — table : {} (via SQL DELETE)", label, tableName);
 
-        List<String> allIds = queryDao.findAllIds(tableName);
-        if (allIds.isEmpty()) {
+        int deleted = queryDao.deleteAllViaSQL(tableName);
+
+        if (deleted > 0) {
+            log.info("✅ [{}] Suppression globale terminée : {} embeddings supprimés (via SQL)", label, deleted);
+        } else {
             log.info("ℹ️ [{}] Aucun embedding à supprimer", label);
-            return 0;
         }
 
-        log.info("📊 [{}] {} embeddings trouvés", label, allIds.size());
-
-        int deleted = 0;
-        int batchSize = EmbeddingRepositoryConstants.DELETE_BATCH_SIZE;
-
-        for (int i = 0; i < allIds.size(); i += batchSize) {
-            List<String> batch = allIds.subList(i, Math.min(i + batchSize, allIds.size()));
-            for (String id : batch) {
-                try {
-                    store.remove(id);
-                    deleted++;
-                } catch (Exception e) {
-                    log.warn("⚠️ [{}] Erreur suppression {} : {}", label, id, e.getMessage());
-                }
-            }
-            logProgress(deleted, allIds.size(), label);
-        }
-
-        log.info("✅ [{}] Suppression globale terminée : {}/{}", label, deleted, allIds.size());
         return deleted;
     }
 

@@ -4,7 +4,7 @@ import com.exemple.nexrag.dto.batch.BatchInfo;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
@@ -37,7 +37,7 @@ public class BatchInfoRegistry {
             batchId,
             filename,
             mimeType,
-            LocalDateTime.now(),
+            OffsetDateTime.now(),
             new ArrayList<>(),
             new ArrayList<>()
         );

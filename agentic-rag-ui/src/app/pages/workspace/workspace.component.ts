@@ -32,7 +32,7 @@ import { ToastContainerComponent } from '../../shared/components/toast-container
       height: 100vh;
     }
     .workspace-sidebar {
-      width: 400px;
+      width: 500px;
       overflow-y: auto;
       border-right: 1px solid #e0e0e0;
     }

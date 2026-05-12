@@ -406,6 +406,28 @@
             <scope>test</scope>
         </dependency>
 
+        <!-- Testcontainers core + JUnit 5 extension (Phase 9 — integration tests) -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+            <version>1.19.7</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>1.19.7</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Awaitility — assertions asynchrones (streaming SSE, progress WebSocket) -->
+        <dependency>
+            <groupId>org.awaitility</groupId>
+            <artifactId>awaitility</artifactId>
+            <version>4.2.1</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -426,12 +448,23 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
+                <version>3.1.2</version>
                 <configuration>
                     <includes>
                         <include>**/*Tests.java</include>
                         <include>**/*Test.java</include>
                         <include>**/*Spec.java</include>
                     </includes>
+                    <!-- ============ Parallel Execution Configuration ============ -->
+                    <!-- Exécution parallèle par classes (non pas par méthodes) -->
+                    <!-- Testcontainers @Container static sont partagés entre tests -->
+                    <parallel>classes</parallel>
+                    <!-- Nombre de threads (ajustable : -Dthreads=N) -->
+                    <threadCount>${maven.test.threads:4}</threadCount>
+                    <!-- Réutiliser les forks pour réduire l'overhead JVM -->
+                    <reuseForks>true</reuseForks>
+                    <!-- Argonaut: accepter ou rejeter les groupes -->
+                    <groups>${test.groups:integration}</groups>
                 </configuration>
             </plugin>
             <plugin>

@@ -194,4 +194,5 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan
+at `specs/009-phase-09-integration/plan.md`.
 <!-- SPECKIT END -->

@@ -9,7 +9,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -176,7 +176,7 @@ class IngestionTrackerSpec {
     @DisplayName("DOIT déléguer getBatchInfo() à infoRegistry.get()")
     void shouldDelegateGetBatchInfoToInfoRegistry() {
         BatchInfo info = new BatchInfo(BATCH_ID, FILENAME, MIME_TYPE,
-            LocalDateTime.now(), new ArrayList<>(), new ArrayList<>());
+            OffsetDateTime.now(), new ArrayList<>(), new ArrayList<>());
         when(infoRegistry.get(BATCH_ID)).thenReturn(Optional.of(info));
 
         Optional<BatchInfo> result = tracker.getBatchInfo(BATCH_ID);
@@ -247,7 +247,7 @@ class IngestionTrackerSpec {
     @DisplayName("DOIT déléguer getAllBatches() à infoRegistry.getAll()")
     void shouldDelegateGetAllBatchesToInfoRegistry() {
         BatchInfo info = new BatchInfo(BATCH_ID, FILENAME, MIME_TYPE,
-            LocalDateTime.now(), new ArrayList<>(), new ArrayList<>());
+            OffsetDateTime.now(), new ArrayList<>(), new ArrayList<>());
         when(infoRegistry.getAll()).thenReturn(Map.of(BATCH_ID, info));
 
         Map<String, BatchInfo> result = tracker.getAllBatches();

@@ -1,0 +1,15 @@
+# Integration Test Configuration
+# Désactive les scheduled tasks et réduit le bruit de logs
+
+spring:
+  scheduling:
+    enabled: false  # Désactive ClamAvHealthScheduler, WebSocketCleanupTask, etc.
+
+logging:
+  level:
+    root: INFO
+    com.exemple.nexrag: INFO
+    # Supprime les logs DEBUG des composants internes
+    org.springframework: WARN
+    org.springframework.web: WARN
+    org.hibernate: WARN

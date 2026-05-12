@@ -17,9 +17,23 @@ npm run build
 # Build in watch mode (dev)
 npm run watch
 
-# Run tests (Vitest)
+# Run tests (Vitest with @ngneat/spectator)
 npm test
+
+# Run tests with coverage report (text, lcov, html)
+npm test -- --coverage
+
+# Run tests in watch mode
+npm test -- --watch
+
+# Run a specific test file
+npm test -- src/app/features/chat/store/chat.store.spec.ts
+
+# Run tests matching a pattern
+npm test -- --grep "ChatStore"
 ```
+
+**Note**: Prettier is configured in `package.json` but there are no scripts for it yet. To format code, run `npx prettier --write .` or install a Prettier extension in your editor.
 
 ## Key Files
 
@@ -134,13 +148,29 @@ shared/
 | ngx-toastr | Toast notifications |
 | angular-split | Resizable panel layout in workspace |
 
-## Code Style
+## Code Style & Patterns
 
+### Architecture
 - **Standalone components** throughout — no feature NgModules (except `MaterialModule`)
-- **Prettier**: `singleQuote: true`, `printWidth: 100`, Angular HTML parser for templates
 - **Lazy loading**: all feature pages use `loadComponent` in `app.routes.ts`
+- **Dependency Injection**: Use `inject()` function in modern Angular (not constructor injection)
+- **NgRx**: Store slices managed via `createFeatureSelector` and `createSelector`; use `createEffect` for side effects
+
+### Formatting & Lint
+- **Prettier**: `singleQuote: true`, `printWidth: 100`, Angular HTML parser for templates configured in `package.json`
+- Format code: `npx prettier --write .` or use editor extension; **no ESLint** configured (only Prettier)
+
+### Naming & Constants
 - **Upload mode**: default is `async` (`uploadMode: 'async'` in `IngestionState`)
-- **Comments**: French inline comments in stores and services
+- **Comments**: French inline comments in stores and services (preserve this for consistency)
+- **Component selectors**: use `app-` prefix (e.g., `app-chat-interface`)
+
+### Common Patterns
+- **Service injection**: `private readonly service = inject(ServiceClass)`
+- **Store dispatch**: `this.store.dispatch(actionName())`
+- **Store selectors**: `this.store.select(selectFeature).subscribe(...)`
+- **Change detection**: Use `OnPush` change detection strategy where possible (`changeDetection: ChangeDetectionStrategy.OnPush`)
+- **Unsubscribe**: Use `@ngrx/store` observables (auto-unsubscribe via async pipe in templates) or `takeUntilDestroyed()` operator
 
 ## Environment & Proxy
 
@@ -155,15 +185,94 @@ Proxy (`proxy.conf.json`) transparently forwards to backend — no CORS issues i
 - `/api/**` → `http://localhost:8090` (HTTP)
 - `/ws/**` → `http://localhost:8090` (WebSocket upgrade)
 
-## Build Notes
+**Important**: The proxy only works in development. For production, the backend and frontend must be served from the same origin, or CORS must be explicitly configured on the backend.
 
+## Build & Development
+
+### Build Configuration
 - Builder: `@angular/build:application` (esbuild) — **not** `@angular-devkit/build-angular`
 - Bundle budget: warning at 2 MB, error at 2.5 MB (initial chunk)
-- `allowedCommonJsDependencies`: `sockjs-client`, `@stomp/stompjs`, `buffer`, etc. — already whitelisted, no warnings expected
-- Production: swaps `environment.ts` → `environment.prod.ts` + output hashing
+- `allowedCommonJsDependencies`: `sockjs-client`, `@stomp/stompjs`, `buffer`, `url-parse`, `inherits`, `events`, `eventsource`, `crypto` — already whitelisted, no warnings expected
+- Production: swaps `environment.ts` → `environment.prod.ts` + output hashing + optimization
 
-## Testing Status
+### Debugging & Development Tools
+- **Browser DevTools**: Open DevTools (F12) → Console tab shows errors/warnings
+- **NgRx DevTools**: `@ngrx/store-devtools` is enabled in `app.config.ts` — Actions and state tree visible in browser DevTools
+- **Source Maps**: Enabled in development builds (`sourceMap: true` in `angular.json`)
+- **Angular DevTools Browser Extension**: Useful for component/change detection debugging
+- **Proxy Debugging**: Dev server proxies to `:8090` — if calls fail, check backend is running on `:8090` and review `proxy.conf.json`
 
+### File Replacement for Environments
+- Development: uses `src/environments/environment.ts` (default)
+- Production: swaps to `src/environments/environment.prod.ts` during `ng build`
+- Both should define `apiUrl` and WebSocket endpoints
+
+## Critical Gotchas & Important Notes
+
+### Real-Time Communication (SSE & WebSocket)
+- **SSE in `StreamingApiService`**: Opened directly via `new EventSource()` (not `HttpClient`) — must manually re-enter Angular zone with `NgZone.run()`
+- **WebSocket/STOMP**: Requires `global: 'globalThis'` polyfill in `angular.json` — already set, but needed for sockjs-client
+- **Zone.js integration**: Both SSE and STOMP operate outside Angular's zone; wrap callbacks with `ngZone.run()` when updating state
+
+### Interceptors
+- **Order matters**: `duplicateInterceptor` must handle 409 before it propagates; `rateLimitInterceptor` watches for 429
+- **Retry-After header**: Rate limit interceptor reads this; respect its value before retrying
+
+### Change Detection
+- Not configured globally as `OnPush` — consider adding `changeDetection: ChangeDetectionStrategy.OnPush` to components if they only receive inputs or dispatch actions
+- Streaming messages and real-time updates may require manual change detection if not using the async pipe
+
+### Dependencies to Preserve
+- Do not remove or downgrade: `@stomp/stompjs`, `sockjs-client` (WebSocket), `prismjs` (code highlighting), `ngx-markdown` (chat messages)
+- `bootstrap.bundle.min.js` is loaded in `angular.json` scripts array; do not add Bootstrap JS components separately (CSS only via Bootstrap 5.3)
+
+## Testing
+
+### Test Runner & Framework
+- **Vitest** (not Karma/Jasmine) — configured via `@angular/build:unit-test`
+- **@ngneat/spectator** — helper library for component and service testing
+- **jsdom** — DOM implementation for tests
+
+### Coverage Thresholds
+Tests are configured with the following minimum coverage thresholds (via `angular.json`):
+- Statements: 80%
+- Branches: 75%
+- Functions: 85%
+- Lines: 80%
+
+### Current Test Status
 - Only `app.spec.ts` exists (stub — no real assertions)
-- Test runner: **Vitest** (not Karma/Jasmine)
 - No component or service tests yet — do not assume coverage when modifying logic
+
+### Writing Tests
+- Use `provideMockStore()` from `@ngrx/store` for NgRx store testing
+- Use `@ngneat/spectator` for component/service unit tests
+- For mocked HTTP, use Angular's `HttpClientTestingModule`
+- Integration tests (Testcontainers) are in the backend only (`*IntegrationSpec` classes)
+
+## Common Development Tasks
+
+### Adding a New Feature Component
+1. Generate component: `ng generate component features/{feature}/components/{name}` (though manual creation is fine too)
+2. Make it standalone: add `standalone: true` to `@Component`
+3. Import dependencies in the component (RxJS, Angular Material, shared pipes, etc.)
+4. Add to feature's `pages/*.ts` or lazy route
+5. Use store selectors/dispatch as needed
+
+### Adding a New Store Feature
+1. Create `store/{slice}.store.ts` with `createFeatureSelector`, `createSelector`, `createAction`, `createReducer`
+2. Add to `app.config.ts` via `provideStore()` with the feature reducer
+3. Create `store/{slice}.effects.ts` if side effects needed; add to `provideEffects()` in `app.config.ts`
+4. Inject store and dispatch/select in components
+
+### Debugging WebSocket Issues
+1. Check browser DevTools → Network tab → WS (WebSocket) connections
+2. Verify STOMP subscription paths match backend (`/topic/`, `/user/queue/` etc.)
+3. Check backend is running on `:8090` and STOMP endpoint is exposed at `/ws`
+4. Look for "CONNECT_ERROR" in console — usually means backend didn't accept the connection
+
+### Testing Real-Time Updates Locally
+- Start backend: `./mvnw spring-boot:run` (from `/nex-rag/`)
+- Start frontend: `npm start`
+- Open browser at `http://localhost:4200`
+- Check browser DevTools → Application → Storage → Session Storage for any cached state issues

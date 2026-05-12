@@ -19,7 +19,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build (skip tests)
 ./mvnw clean package -DskipTests
 
-# Run tests
+# Run all tests (unit + integration with Testcontainers)
 ./mvnw test
 
 # Run a single test class
@@ -27,6 +27,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 # Run a single test method
 ./mvnw test -Dtest=ClassName#methodName
+
+# Run integration tests only
+./mvnw test -Dtest=*IntegrationSpec
+
+# Run integration test with container logs
+./mvnw test -Dtest=*IntegrationSpec -DcontainerLogMode=OnFailure
 ```
 
 ### Frontend (Angular)
@@ -155,44 +161,88 @@ All RAG pipeline parameters are in [nex-rag/src/main/resources/application.yml](
 - **CI/CD**: GitHub Actions in `.github/workflows/` — orchestrates GCP bootstrap, Terraform provisioning, Docker build/push, and VM deployment
 - **Local**: `docker-compose.yml` starts all infrastructure; run backend and frontend separately
 
-## Active Technologies
-- Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin (001-phase1-ingestion-foundation)
-- Redis (Mockito-stubbed; no real Redis in unit tests) (001-phase1-ingestion-foundation)
-- Java 21 (records, sealed classes, pattern matching disponibles) (002-phase2-ingestion-strategy)
-- Redis (Mockito-stubbé en unitaire) · pgvector (EmbeddingStore mocké) (002-phase2-ingestion-strategy)
-- Java 21 + Spring Boot 3.4.2, JUnit 5 (Jupiter), Mockito, AssertJ, LangChain4j 1.0.0-beta1 (003-phase3-retrieval)
-- pgvector (EmbeddingStore — mocked in unit tests), Redis (not used in retrieval phase) (003-phase3-retrieval)
-- Java 21 (Spring Boot 3.4.2) (004-phase-4-streaming)
-- Redis (clé `conversation:{id}`, TTL 3600s, `ConversationState` sérialisée en JSON) (004-phase-4-streaming)
-- Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test, reactor-test (StepVerifier for Flux-based streaming) (006-phase6-facade)
-- N/A — all dependencies mocked; no real infrastructure in unit tests (006-phase6-facade)
-- Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (MockMvc, `@WebMvcTest`), Jakarta Bean Validation (`@NotBlank`) (007-phase7-controllers)
-- Java 21 + JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test (`MockHttpServletRequest`/`MockHttpServletResponse`), Bucket4j (`io.github.bucket4j:bucket4j_jdk17-lettuce`) (008-interceptor-validation)
-- Redis (mocked via `ProxyManager<String>` Mockito mock — no real Redis in unit tests) (008-interceptor-validation)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, (011-phase2-interceptors)
-- N/A — no persistent storage; `localStorage` used only in `rateLimitInterceptor` (011-phase2-interceptors)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@angular/common/http`, (012-phase3-core-services)
-- N/A — no persistent storage in tested services (012-phase3-core-services)
-- TypeScript 5.9 / Angular 21 + `@ngrx/store ^21.0.1`, `@ngrx/effects ^21.0.1`, `@ngrx/entity ^21.0.1`, `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, `@ngrx/effects/testing ^21.0.1` (013-chat-store-ngrx)
-- N/A — no persistence in unit tests (013-chat-store-ngrx)
-- TypeScript 5.9 / Angular 21 (standalone components throughout) + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest, `ngx-markdown` (MarkdownModule), `@angular/forms` (FormsModule) (014-chat-components-tests)
-- TypeScript 5.9 / Angular 21 (standalone components throughout) + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8`, `@ngrx/store ^21.0.1`, `@ngrx/entity ^21.0.1` (015-chat-pages-resolvers)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, `@ngrx/effects/testing ^21.0.1`, Vitest `^4.0.8` (017-ingestion-components-tests)
-- N/A — all specs use `provideMockStore`; no real persistence (017-ingestion-components-tests)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8` (018-ingestion-pages-tests)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, Angular RouterTestingModule, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8` (019-workspace-page-tests)
-- N/A — no persistence; all state lives in child components via shared NgRx store (019-workspace-page-tests)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator/vitest ^22.1.0`, `RouterTestingModule` (Angular 21 BOM), Vitest `^4.0.8` (019-workspace-page-tests)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8`, `RouterTestingModule` (Angular 21 BOM) (019-app-root-tests)
-- N/A — `provideMockStore` for unit tests; real `appConfig` providers for integration tests (019-app-root-tests)
-- TypeScript 5.9 / Angular 21 + `@ngneat/spectator/vitest ^22.1.0`, `@ngrx/store/testing ^21.0.1`, Vitest `^4.0.8` (020-workspace-page-tests)
-- N/A — no persistence; `provideMockStore` only in integration tests (020-workspace-page-tests)
+## Core Tech Stack
+
+### Backend
+
+**Language & Framework**:
+- Java 21 + Spring Boot 3.4.2
+- LangChain4j 1.0.0-beta1 (unified AI framework for OpenAI, pgvector, document parsing)
+
+**Testing**:
+- **Unit tests**: JUnit 5 (Jupiter), Mockito, AssertJ, Spring Boot Test
+- **Integration tests**: Testcontainers 1.19.7 (PostgreSQL/pgvector, Redis, ClamAV), WireMock 2.35.2 (OpenAI API stubbing), Awaitility
+- **Code coverage**: JaCoCo Maven Plugin, SonarQube integration (80% threshold)
+
+**Resilience & Performance**:
+- Resilience4j (circuit breakers, retry, timeout)
+- Bucket4j + Redis (distributed rate limiting)
+- Caffeine + Redis (two-tier embedding caching)
+
+**Observability**:
+- Micrometer + Prometheus (metrics export)
+- Zipkin via Brave bridge (distributed tracing, 100% sampling in dev)
+- Spring Boot Actuator (health, info endpoints)
+
+### Frontend
+
+**Language & Framework**:
+- TypeScript 5.9 + Angular 21 (standalone components throughout, esbuild builder)
+
+**State Management & Testing**:
+- NgRx 21 (store, effects, entity) for chat, ingestion, CRUD, rate-limit slices
+- Vitest + @ngneat/spectator for unit/component tests
+- `provideMockStore` in unit tests, real `appConfig` in integration scenarios
+
+**UI & Real-time**:
+- Angular Material 21 (forms, dialogs, progress)
+- Bootstrap 5.3 (layout, grid, utilities)
+- ngx-markdown + PrismJS (markdown rendering, syntax highlighting)
+- STOMP/SockJS (WebSocket for ingestion progress)
+- Server-Sent Events (SSE) for LLM token streaming
+
+## Testing Patterns
+
+### Unit Tests (Mocked Infrastructure)
+- Backend: Services tested with `@ExtendWith(MockitoExtension.class)`, dependencies mocked
+- Frontend: Components tested with `provideMockStore()`, HTTP services mocked
+- **Principle**: No external dependencies, fast execution (<1s per test)
+
+### Integration Tests (Real Infrastructure via Testcontainers)
+**Backend** (Phase 09):
+- Classes: `*IntegrationSpec` in `service.rag.integration` package
+- Fixture: `AbstractIntegrationSpec` manages shared container lifecycle (`@DynamicPropertySource` overrides JDBC/Redis/antivirus URLs)
+- Containers: PostgreSQL 16 (pgvector), Redis 7-alpine, ClamAV latest
+- External APIs: WireMock stubs OpenAI endpoints (no real API calls)
+- Performance targets: ingestion <10s/doc, retrieval <3s, first token <5s
+
+**Example test class pattern**:
+```java
+@SpringBootTest(webEnvironment = RANDOM_PORT)
+@Testcontainers
+class IngestionPipelineIntegrationSpec extends AbstractIntegrationSpec {
+  // Inherits @Container static containers + @DynamicPropertySource setup
+  // Tests use TestRestTemplate or MockMvc with real Spring context
+}
+```
 
 ## Recent Changes
-- 001-phase1-ingestion-foundation: Added Java 21 + JUnit 5 (Jupiter) · Mockito · AssertJ · Spring Boot Test · JaCoCo Maven Plugin
+- 009-phase-09-integration: Comprehensive REST API integration tests (5 classes, 32+ tests) using Testcontainers + WireMock
+- 020-workspace-page-tests: Frontend integration tests for workspace layout and page composition
 
-<!-- SPECKIT START -->
-For additional context about technologies to be used, project structure,
-shell commands, and other important information, read the current plan
-at `specs/009-phase-09-integration/plan.md`.
-<!-- SPECKIT END -->
+## Development Workflow
+
+**Phases and Specs**: Work is organized into sequential phases (001–020+) tracked in `/specs/{N}-phase-{name}/`.
+Each phase includes:
+- `spec.md` — Feature requirements and acceptance criteria
+- `plan.md` — Technical design and implementation sequence
+- `tasks.md` — Actionable, dependency-ordered work items
+
+Current/recent phases:
+- `009-phase-09-integration` — REST API integration tests (Testcontainers + WireMock)
+- `020-workspace-page-tests` — Frontend shell page integration tests
+- Earlier phases cover ingestion, retrieval, streaming, controllers, interceptors, store, components
+
+**Branch Naming**: Feature branches follow `{N}-phase-{name}-{id}` pattern (e.g., `009-phase-09-integration`)
+
+**Code Review**: Use staff-level reviews (`/speckit-staff-review-run`) before merging to ensure spec compliance and architecture adherence

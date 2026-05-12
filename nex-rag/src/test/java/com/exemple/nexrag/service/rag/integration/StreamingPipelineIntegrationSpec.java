@@ -44,29 +44,29 @@ public class StreamingPipelineIntegrationSpec extends AbstractIntegrationSpec {
     private String conversationId;
 
     /**
-     * Pre-ingest sample.pdf and prepare conversation context.
+     * Use shared fixture (preIngestSamplePdfOnce) instead of per-test ingestion.
+     * Optimization: 2 tests × 500ms ingestion = 1s saved.
      */
     @BeforeEach
     @Override
     void integrationTestSetup() {
-        super.integrationTestSetup(); // Cleanup
+        shouldCleanupPostgres = false; // Skip PostgreSQL cleanup (shared fixture)
+        super.integrationTestSetup(); // Cleanup Redis + WireMock only
 
-        log.info("📥 Pre-ingesting sample.pdf for streaming tests");
+        log.info("📥 Using shared fixture (sample.pdf pre-ingested once)");
 
-        var body = new LinkedMultiValueMap<String, Object>();
-        body.add("file", new ClassPathResource("fixtures/sample.pdf"));
+        preIngestSamplePdfOnce(); // Ingest once, reuse for all tests
 
-        var response = restTemplate.postForEntity(
-            "/api/ingest",
-            createMultipartRequest(body),
-            BatchInfo.class
-        );
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
+        // Wait for async ingestion to complete (first test only)
+        try {
+            Thread.sleep(500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
 
         conversationId = "stream_" + UUID.randomUUID().toString();
 
-        log.info("✅ Pre-ingest complete, conversationId={}", conversationId);
+        log.info("✅ Setup complete (shared fixture), conversationId={}", conversationId);
     }
 
     // ============ T026: Token Emission Before Completion ============

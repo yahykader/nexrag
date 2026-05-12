@@ -11,6 +11,37 @@ Phase 9 integration tests have been optimized for **60-70% faster execution** th
 
 ---
 
+## 0. Infrastructure Setup (CRITICAL)
+
+**Before running integration tests, start the docker-compose infrastructure:**
+
+```bash
+# From project root or /nex-rag directory
+docker-compose up -d
+
+# Verify containers are running
+docker ps | grep rag-
+```
+
+Expected containers (should see all running):
+- `rag-agpgdb` (PostgreSQL 5432)
+- `rag-redis` (Redis 6379)
+- `rag-clamav` (ClamAV 3310)
+
+**Why**: Tests use existing docker-compose containers on **fixed ports** (not Testcontainers) to:
+- Avoid duplicate container creation
+- Prevent port conflicts
+- Enable parallel test execution safely
+- Reduce infrastructure overhead
+
+**If docker-compose is not running**, tests will fail with connection errors like:
+```
+ERROR Connection refused to localhost:5432 (PostgreSQL)
+ERROR Connection refused to localhost:6379 (Redis)
+```
+
+---
+
 ## 1. Parallel Test Execution
 
 ### Default Configuration
@@ -32,6 +63,11 @@ Maven Surefire plugin now runs tests in parallel:
 ```
 
 ### Run Commands
+
+**Prerequisite: Start docker-compose infrastructure**
+```bash
+docker-compose up -d
+```
 
 **All integration tests (parallel, 4 threads)**:
 ```bash
@@ -110,37 +146,54 @@ Gain: ~70% faster
 
 ---
 
-## 4. Shared Infrastructure Strategy
+## 4. Docker Compose Infrastructure
 
-### Testcontainers Reuse
+### Architecture
 
-All containers are created with `.withReuse(true)`:
+Tests use **existing docker-compose containers** on fixed ports instead of Testcontainers:
 
-```java
-@Container
-static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("pgvector/pgvector:pg16")
-    .withDatabaseName("nexrag_test")
-    .withUsername("testuser")
-    .withPassword("testpass")
-    .withReuse(true);  // ← Reuse across test runs
+```yaml
+# docker-compose.yml
+services:
+  rag-agpgdb:    # PostgreSQL (port 5432)
+  rag-redis:     # Redis (port 6379)
+  rag-clamav:    # ClamAV (port 3310)
 ```
 
-**Effect**:
-- First test suite run: ~30s container startup
-- Subsequent runs: ~1-2s (containers already running)
-- Container lifecycle: persists until manually stopped or Docker service restarts
+**Why**:
+- Avoid duplicate container creation (Testcontainers + docker-compose conflict)
+- Enable safe parallel test execution (no random port conflicts)
+- Share infrastructure across unit + integration tests
+- Reduce test startup overhead
 
-### Clean Up Containers (if needed)
+### Startup
 
 ```bash
-# List Docker containers
-docker ps -a | grep testcontainers
+# Start all infrastructure (from project root or /nex-rag)
+docker-compose up -d
 
-# Remove specific container
-docker rm -f <container-id>
+# Verify containers running
+docker ps | grep rag-
+```
 
-# Or: Remove all testcontainers
-docker ps -a | grep testcontainers | awk '{print $1}' | xargs docker rm -f
+Expected output:
+```
+rag-agpgdb     5432/tcp  (PostgreSQL)
+rag-redis      6379/tcp  (Redis)
+rag-clamav     3310/tcp  (ClamAV)
+```
+
+### Stop/Cleanup
+
+```bash
+# Stop all containers (data persists)
+docker-compose down
+
+# Stop and remove all data
+docker-compose down -v
+
+# View logs
+docker-compose logs -f
 ```
 
 ---
@@ -224,24 +277,53 @@ Recommended settings for different hardware:
 
 ## 8. Troubleshooting
 
+### Docker Compose Not Running
+
+**Symptom**: Connection refused errors like `java.net.ConnectException: Connection refused (Connection refused)`
+
+**Cause**: Docker-compose infrastructure not started
+
+**Solution**:
+```bash
+# Start docker-compose
+docker-compose up -d
+
+# Verify containers are running
+docker ps | grep rag-
+
+# Check if specific ports are open
+netstat -an | grep -E "5432|6379|3310"
+```
+
+**Expected output**:
+```
+rag-agpgdb     listening on :5432 (PostgreSQL)
+rag-redis      listening on :6379 (Redis)
+rag-clamav     listening on :3310 (ClamAV)
+```
+
 ### Tests Hang or Timeout
 
 **Symptom**: Some tests hang indefinitely
 
-**Cause**: Container startup or database connection issues
+**Cause**: Database/Redis connection issues, docker-compose containers not responding
 
 **Solutions**:
 ```bash
-# 1. Check if containers are healthy
-docker ps
+# 1. Verify docker-compose is running
+docker ps | grep rag-
 
-# 2. Remove stale containers
-docker ps -a | grep testcontainers | awk '{print $1}' | xargs docker rm -f
+# 2. Check container logs
+docker-compose logs -f
 
-# 3. Run with single thread (safer)
+# 3. Restart docker-compose
+docker-compose down
+docker-compose up -d
+
+# 4. Run with single thread (safer)
 ./mvnw test -Dmaven.test.threads=1
 
-# 4. Run specific test class
+# 5. Run specific test class
 ./mvnw test -Dtest=IngestionPipelineIntegrationSpec
 ```
 

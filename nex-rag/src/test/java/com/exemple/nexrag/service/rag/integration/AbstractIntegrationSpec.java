@@ -14,10 +14,6 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.Map;
 
@@ -31,8 +27,9 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  * Provides @DynamicPropertySource to override Spring properties at runtime.
  * Implements @BeforeEach cleanup: DELETE /api/files, FLUSHALL Redis, resetAll WireMock, register stubs.
  * <p>
- * Architecture: Singleton Container Pattern (Testcontainers .withReuse(true)) shares containers
- * across 5 IntegrationSpec classes, reducing startup overhead from 4×30s to 1×30s.
+ * Architecture: Uses existing docker-compose containers (fixed ports: 5432/Postgres, 6379/Redis, 3310/ClamAV)
+ * instead of Testcontainers to avoid port conflicts and duplicate container creation.
+ * Tests connect directly to docker-compose infrastructure started via: docker-compose up -d
  * <p>
  * Compliance: Follows NexRAG Test Constitution v1.1.0 — Principle II (SOLID DIP — tests call REST APIs,
  * not direct repositories), Principle III (separation of test/main source), Principle IV (80% coverage
@@ -40,29 +37,15 @@ import static org.springframework.boot.test.context.SpringBootTest.WebEnvironmen
  */
 @Slf4j
 @SpringBootTest(webEnvironment = RANDOM_PORT)
-@Testcontainers
 @ActiveProfiles("integration-test")
 @Import(IntegrationTestConfiguration.class)
 public abstract class AbstractIntegrationSpec {
 
-    // ============ Static Containers (Singleton Pattern with .withReuse) ============
-
-    @Container
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("pgvector/pgvector:pg16")
-        .withDatabaseName("nexrag_test")
-        .withUsername("testuser")
-        .withPassword("testpass")
-        .withReuse(true);
-
-    @Container
-    static final GenericContainer<?> REDIS = new GenericContainer<>("redis:7-alpine")
-        .withExposedPorts(6379)
-        .withReuse(true);
-
-    @Container
-    static final GenericContainer<?> CLAMAV = new GenericContainer<>("clamav/clamav:latest")
-        .withExposedPorts(3310)
-        .withReuse(true);
+    // ============ Docker Compose Fixed Ports ============
+    private static final String DOCKER_HOST = "localhost";
+    private static final int POSTGRES_PORT = 5432;
+    private static final int REDIS_PORT = 6379;
+    private static final int CLAMAV_PORT = 3310;
 
     @RegisterExtension
     static final WireMockExtension OPEN_AI_MOCK = WireMockExtension.newInstance()
@@ -92,69 +75,83 @@ public abstract class AbstractIntegrationSpec {
      */
     private static volatile boolean pdfPreIngestedForSuite = false;
 
-    // ============ Dynamic Property Override ============
+    // ============ Dynamic Property Override (Docker Compose) ============
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        // PostgreSQL datasource
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
+        log.info("🐳 Configuring Spring properties for docker-compose containers (localhost:5432, :6379, :3310)");
 
-        // Redis
-        registry.add("spring.redis.host", REDIS::getHost);
-        registry.add("spring.redis.port", () -> REDIS.getMappedPort(6379));
-        registry.add("spring.redis.password", () -> "");
+        // PostgreSQL datasource (docker-compose fixed port 5432)
+        registry.add("spring.datasource.url",
+            () -> "jdbc:postgresql://" + DOCKER_HOST + ":" + POSTGRES_PORT + "/vectordb");
+        registry.add("spring.datasource.username", () -> "admin");
+        registry.add("spring.datasource.password", () -> "1234");
 
-        // ClamAV antivirus
-        registry.add("antivirus.host", CLAMAV::getHost);
-        registry.add("antivirus.port", () -> CLAMAV.getMappedPort(3310));
+        // Redis (docker-compose fixed port 6379)
+        registry.add("spring.redis.host", () -> DOCKER_HOST);
+        registry.add("spring.redis.port", () -> REDIS_PORT);
+        registry.add("spring.redis.password", () -> "dev_password_123");
 
-        // OpenAI (WireMock)
+        // ClamAV antivirus (docker-compose fixed port 3310)
+        registry.add("antivirus.host", () -> DOCKER_HOST);
+        registry.add("antivirus.port", () -> CLAMAV_PORT);
+
+        // OpenAI (WireMock — dynamic port)
         registry.add("openai.base-url", OPEN_AI_MOCK::baseUrl);
         registry.add("openai.chat.api-url", () -> OPEN_AI_MOCK.baseUrl() + "/v1/chat/completions");
     }
 
     // ============ Cleanup & Stub Registration (@BeforeEach) ============
 
+    /**
+     * Flag to enable/disable PostgreSQL cleanup.
+     * Set to false when using shared fixtures (preIngestSamplePdfOnce()) to avoid re-deleting embeddings.
+     */
+    protected boolean shouldCleanupPostgres = true;
+
     @BeforeEach
     void integrationTestSetup() {
         log.info("📋 Starting @BeforeEach cleanup and WireMock stub registration");
+        log.info("🐳 Using docker-compose infrastructure: PostgreSQL(5432), Redis(6379), ClamAV(3310)");
 
         // Cache Redis vidé → chaque test démarre en cold cache (spec.md §Edge Cases: "cold start lors d'une requête d'embedding")
         // This implicit coverage of the "cold cache" edge case applies to all tests.
 
-        // 1. Clear all ingested documents via direct repository call
+        // 1. Clear all ingested documents via direct repository call (only if shouldCleanupPostgres = true)
         // This is more reliable than REST endpoint which can fail silently
-        try {
-            if (embeddingRepository != null) {
-                log.debug("Clearing all documents via EmbeddingRepository");
-                // Use timeout to prevent hanging on database connection failures (e.g., when Docker not running)
-                Integer deleted = executeWithTimeout(() -> embeddingRepository.deleteAllFilesPlusCache(), 5000);
-                if (deleted != null && deleted > 0) {
-                    log.debug("✅ Direct delete cleared {} embeddings", deleted);
-                } else {
-                    log.debug("ℹ️ No embeddings to clear (database unavailable or empty)");
-                }
-
-                executeWithTimeout(() -> {
-                    embeddingRepository.clearAllTracking();
-                    return null;
-                }, 5000);
-            } else {
-                log.warn("⚠️ EmbeddingRepository not available, falling back to REST endpoint");
-                restTemplate.delete("/api/files");
-                Thread.sleep(500);
-            }
-        } catch (Exception e) {
-            log.warn("⚠️ Direct delete failed: {} ({})", e.getClass().getSimpleName(), e.getMessage());
-            // Fallback: try REST endpoint
+        if (shouldCleanupPostgres) {
             try {
-                restTemplate.delete("/api/files");
-                Thread.sleep(500);
-            } catch (Exception e2) {
-                log.warn("⚠️ REST delete also failed: {}", e2.getMessage());
+                if (embeddingRepository != null) {
+                    log.debug("Clearing all documents via EmbeddingRepository");
+                    // Use timeout to prevent hanging on database connection failures (e.g., when Docker not running)
+                    Integer deleted = executeWithTimeout(() -> embeddingRepository.deleteAllFilesPlusCache(), 5000);
+                    if (deleted != null && deleted > 0) {
+                        log.debug("✅ Direct delete cleared {} embeddings", deleted);
+                    } else {
+                        log.debug("ℹ️ No embeddings to clear (database unavailable or empty)");
+                    }
+
+                    executeWithTimeout(() -> {
+                        embeddingRepository.clearAllTracking();
+                        return null;
+                    }, 5000);
+                } else {
+                    log.warn("⚠️ EmbeddingRepository not available, falling back to REST endpoint");
+                    restTemplate.delete("/api/files");
+                    Thread.sleep(500);
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ Direct delete failed: {} ({})", e.getClass().getSimpleName(), e.getMessage());
+                // Fallback: try REST endpoint
+                try {
+                    restTemplate.delete("/api/files");
+                    Thread.sleep(500);
+                } catch (Exception e2) {
+                    log.warn("⚠️ REST delete also failed: {}", e2.getMessage());
+                }
             }
+        } else {
+            log.debug("⏭️ PostgreSQL cleanup skipped (using shared fixture)");
         }
 
         // 2. FLUSHALL Redis

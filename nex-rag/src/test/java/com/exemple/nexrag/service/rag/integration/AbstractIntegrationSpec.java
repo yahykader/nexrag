@@ -314,8 +314,9 @@ public abstract class AbstractIntegrationSpec {
 
     /**
      * Create a multipart request body (helper for pre-ingest).
+     * Protected to allow access from child test classes.
      */
-    private org.springframework.http.HttpEntity<?> createMultipartRequest(org.springframework.util.MultiValueMap<String, Object> body) {
+    protected org.springframework.http.HttpEntity<?> createMultipartRequest(org.springframework.util.MultiValueMap<String, Object> body) {
         var headers = new org.springframework.http.HttpHeaders();
         headers.setContentType(org.springframework.http.MediaType.MULTIPART_FORM_DATA);
         return new org.springframework.http.HttpEntity<>(body, headers);
